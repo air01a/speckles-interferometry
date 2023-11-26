@@ -74,6 +74,7 @@ def inverse_fourier_transform(fourier_image):
 def process_speckle_interferometry(image_files):
     """ Traite un ensemble d'images de tavelures pour la speckle interferometry. """
     # Charger les images
+    st.header("Sum of correlation")
     speckle_images = load_speckle_images(image_files)
 
     fouriers = []
@@ -88,14 +89,15 @@ def process_speckle_interferometry(image_files):
 
     # Appliquer la transformation de Fourier
     fourier_image = AstroImageProcessing.fourier_transform(average_image)
+    fig = plt.figure(figsize=(8, 6))
 
     # Afficher les résultats
-    plt.subplot(121),plt.imshow(autocorrelation(average_image), cmap = 'gray')
-    plt.title('Image Moyenne'), plt.xticks([]), plt.yticks([])
-    plt.subplot(122),plt.imshow((inverse_fourier_transform(autocorrelation(fourier_image))), cmap = 'gray')
-    plt.title('Transformée de Fourier'), plt.xticks([]), plt.yticks([])
+    ax = fig.add_subplot()
+    ax.imshow(autocorrelation(average_image), cmap = 'gray')
+    #ax2 = fig.add_subplot()
+    #ax2.imshow(((autocorrelation(fourier_image))), cmap = 'gray')
 
-    plt.show()
+    st.pyplot(fig)
 
 
 def show_image_3d(image):
@@ -138,11 +140,28 @@ def find_peak_intensity(image):
 
 def find_roi(image):
     st.header("Peak")
+    col1, col2= st.columns(2)
     blurred = cv2.GaussianBlur(image, (11, 11), 0)
-    thresh = cv2.threshold(blurred, 20000, 65535, cv2.THRESH_BINARY)[1]
+    thresh = cv2.threshold(blurred, 10000, 65535, cv2.THRESH_BINARY)[1]
     thresh = cv2.erode(thresh, None, iterations=2)
     thresh = cv2.dilate(thresh, None, iterations=4)
-    st.image(thresh,clamp=True)
+    with col1:
+        st.image(thresh,clamp=True)
+
+    contours, _ = cv2.findContours(to_st(thresh), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Trouver le bounding box du plus grand contour
+    largest_contour = max(contours, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(largest_contour)
+    print("recadrage",x,y,w,h)
+    # Recadrer l'image sur la zone lumineuse
+
+    cropped_image = image[y:y+h, x:x+w]
+    with col2:
+        st.image(cropped_image,clamp=True)
+
+
+# Afficher ou sauvegarder l'image recadré
 
     #fig, ax = plt.subplots()
     #ax.imshow(thresh, cmap="gray")
@@ -186,13 +205,12 @@ with col2:
     st.image(to_st(image),clamp=True)
 st.header("3D View of image")
 
-show_image_3d(image)
-find_roi(image)
-maxloc = find_peak_intensity(image)
-print(maxloc)
-square_correl(image)
+#show_image_3d(image)
+#find_roi(image)
+#maxloc = find_peak_intensity(image)
+#print(maxloc)
+#square_correl(image)
 
-test="""
 image_files = []
 dir = "images"
 for file in listdir(dir):
@@ -205,4 +223,3 @@ for file in listdir(dir):
 
 # Traitement des images de speckle
 process_speckle_interferometry(image_files)
-"""
