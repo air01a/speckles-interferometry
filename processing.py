@@ -263,7 +263,7 @@ class AstroImageProcessing:
 
         # Calculer la corrélation normalisée
         #correlation = cv2.matchTemplate(image, image2, cv2.TM_CCORR_NORMED)
-        correlation = correlate2d(image, image, mode='full', boundary='fill', fillvalue=0)
+        correlation = correlate2d(image, image2, mode='full', boundary='fill', fillvalue=0)
         return correlation
 
 if __name__=="__main__":

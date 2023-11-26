@@ -11,6 +11,7 @@ import streamlit as st
 import mpld3
 from mpld3 import plugins
 import streamlit.components.v1 as components
+import imutils
 
 
 def load_speckle_images(image_files):
@@ -57,7 +58,9 @@ def align_images_using_cross_correlation(base_image, other_images):
 
 def average_speckle_images(speckle_images):
     """ Calcule l'image moyenne à partir d'un ensemble d'images de tavelures. """
-    return np.mean(speckle_images, axis=0)
+    sum = np.mean(speckle_images, axis=0)
+    print(sum)
+    return (sum*65535/sum.max()).astype(np.uint16)
 
 
 
@@ -90,10 +93,15 @@ def process_speckle_interferometry(image_files):
     # Appliquer la transformation de Fourier
     fourier_image = AstroImageProcessing.fourier_transform(average_image)
     fig = plt.figure(figsize=(8, 6))
-
+    print(fourier_image.shape)
+    #w = 190
+    #h = w
+    #x,y = (int(fourier_image.shape[1]/2-w/2),int(fourier_image.shape[0]/2-h/2))
+    #print(x,y, w, h)
     # Afficher les résultats
     ax = fig.add_subplot()
-    ax.imshow(autocorrelation(average_image), cmap = 'gray')
+    ax.imshow(autocorrelation(fourier_image), cmap = 'gray')
+   # ax.imshow(autocorrelation(fourier_image)[y:int(y+y/2),x:x+w//2], cmap = 'gray')
     #ax2 = fig.add_subplot()
     #ax2.imshow(((autocorrelation(fourier_image))), cmap = 'gray')
 
@@ -145,28 +153,56 @@ def find_roi(image):
     thresh = cv2.threshold(blurred, 10000, 65535, cv2.THRESH_BINARY)[1]
     thresh = cv2.erode(thresh, None, iterations=2)
     thresh = cv2.dilate(thresh, None, iterations=4)
-    with col1:
-        st.image(thresh,clamp=True)
+    #with col1:
+    #    st.image(thresh,clamp=True)
 
-    contours, _ = cv2.findContours(to_st(thresh), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = cv2.findContours(to_st(thresh), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = imutils.grab_contours(contours)
+    for c in cnts:
+	# compute the center of the contour
+        M = cv2.moments(c)
+        print(M)
+        l1 = c[:,:,0].max() - c[:,:,0].min()
+        l2 = c[:,:,1].max() - c[:,:,1].min()
+        l = int(max(l1,l2))
+        cX = int(M["m10"] / M["m00"])
+        cY = int(M["m01"] / M["m00"])
+        cv2.drawContours(thresh, [c], -1, (0, 0, 0), 2)
+
+        cropped_image = image[cY-l:cY+l, cX-l:cX+l]
+        print(cropped_image)
+        print("contour")
+        with col2:
+            st.image(to_st(cropped_image),clamp=True)
+    with col1:
+        st.image(to_st(thresh),clamp=True)
+
 
     # Trouver le bounding box du plus grand contour
-    largest_contour = max(contours, key=cv2.contourArea)
-    x, y, w, h = cv2.boundingRect(largest_contour)
-    print("recadrage",x,y,w,h)
+    #largest_contour = max(contours, key=cv2.contourArea)
+    #x, y, w, h = cv2.boundingRect(largest_contour)
+    #print("recadrage",x,y,w,h)
     # Recadrer l'image sur la zone lumineuse
 
-    cropped_image = image[y:y+h, x:x+w]
-    with col2:
-        st.image(cropped_image,clamp=True)
-
+    #cropped_image = image[y:y+h, x:x+w]
+    #with col2:
+    #    st.image(cropped_image,clamp=True)
 
 # Afficher ou sauvegarder l'image recadré
 
     #fig, ax = plt.subplots()
     #ax.imshow(thresh, cmap="gray")
     #st.pyplot(ax)
-    plt.show()
+    #plt.show()
+
+def resize_with_padding(image, target_width, target_height):
+    h, w = image.shape[:2]
+    delta_w = target_width - w
+    delta_h = target_height - h
+    top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+    left, right = delta_w // 2, delta_w - (delta_w // 2)
+    color = 0
+    return cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
 
 def square_correl(image):
     st.header("Correlations")
@@ -191,7 +227,7 @@ def square_correl(image):
 
 
 st.title("Data exploration for binaries stars post processing")
-path = "images/a258_f0002.fit"
+path = "images/a258_f0006.fit"
 imager = ImageManager()
 image = imager.read_image(path)
 
@@ -206,7 +242,7 @@ with col2:
 st.header("3D View of image")
 
 #show_image_3d(image)
-#find_roi(image)
+find_roi(image)
 #maxloc = find_peak_intensity(image)
 #print(maxloc)
 #square_correl(image)
@@ -222,4 +258,4 @@ for file in listdir(dir):
 #image_files = ['images/speckle1.jpg', 'images/speckle2.jpg', 'images/speckle3.jpg'] # Remplacez par vos fichiers
 
 # Traitement des images de speckle
-process_speckle_interferometry(image_files)
+#process_speckle_interferometry(image_files)
