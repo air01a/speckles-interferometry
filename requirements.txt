@@ -1,0 +1,6 @@
+pyplot
+opencv-python
+scikit-learn
+astropy
+mpld3
+streamlit

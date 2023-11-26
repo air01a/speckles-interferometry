@@ -1,9 +1,11 @@
 from cv2 import GaussianBlur, cvtColor, COLOR_BGR2HSV, COLOR_HSV2BGR, BORDER_DEFAULT, \
     resize
-from numpy import zeros, empty,  float32, uint16, percentile, clip, uint8,interp
-
+from numpy import zeros, empty,  float32, uint16, percentile, clip, uint8,interp, log, fft
+import cv2
 from math import exp
 I16_BITS_MAX_VALUE = 65535
+from scipy.signal import correlate2d
+
 
 class AstroImageProcessing:
     @staticmethod
@@ -246,6 +248,23 @@ class AstroImageProcessing:
     def image_resize(image, factor):
         return resize(image, (int(image.shape[1]*factor), int(image.shape[0]*factor)))
 
+    @staticmethod
+    def fourier_transform(image):
+        """ Applique la transformation de Fourier à une image. """
+        f_transform = fft.fft2(image)
+        f_shift = fft.fftshift(f_transform)
+        return 20*log(abs(f_shift))
+
+    @staticmethod
+    def calculate_correlation(image, image2):
+        # Convertir les images en flottants pour le calcul de corrélation
+        image = image.astype(float32)
+        image2 = image2.astype(float32)
+
+        # Calculer la corrélation normalisée
+        #correlation = cv2.matchTemplate(image, image2, cv2.TM_CCORR_NORMED)
+        correlation = correlate2d(image, image, mode='full', boundary='fill', fillvalue=0)
+        return correlation
 
 if __name__=="__main__":
     from cv2 import imshow, waitKey,destroyAllWindows
