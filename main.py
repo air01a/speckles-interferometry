@@ -18,7 +18,7 @@ def load_speckle_images(image_files):
     """ Charge les images de tavelures à partir d'une liste de chemins de fichiers. """
     imager = ImageManager()
 
-    tab =  [(AstroImageProcessing.levels(AstroImageProcessing.stretch(imager.read_image(file),0.2),5000,0.1,65000)) for file in image_files]
+    tab =  [imager.read_image(file) for file in image_files]
     i=0
     #for t in tab:
     #    cv2.imshow(f"test{i}",(t/255).astype(np.uint8))
@@ -176,7 +176,7 @@ def find_roi(image):
             st.image(to_st(cropped_image),clamp=True)
     with col1:
         st.image(to_st(thresh),clamp=True)
-
+    return cropped_image
 
     # Trouver le bounding box du plus grand contour
     #largest_contour = max(contours, key=cv2.contourArea)
@@ -235,17 +235,17 @@ col1, col2 = st.columns(2)
 with col1:
     st.header("Original")
     st.image(to_st(image), clamp=True)
-image = AstroImageProcessing.levels(AstroImageProcessing.stretch(image,0.2),5000,0.1,65000)
+#image = AstroImageProcessing.levels(AstroImageProcessing.stretch(image,0.2),5000,0.1,65000)
 with col2:
     st.header("Processed")
     st.image(to_st(image),clamp=True)
 st.header("3D View of image")
+image = find_roi(image)
 
-#show_image_3d(image)
-find_roi(image)
+show_image_3d(image)
 #maxloc = find_peak_intensity(image)
 #print(maxloc)
-#square_correl(image)
+square_correl(image)
 
 image_files = []
 dir = "images"
