@@ -1,11 +1,11 @@
 from cv2 import GaussianBlur, cvtColor, COLOR_BGR2HSV, COLOR_HSV2BGR, BORDER_DEFAULT, \
     resize
-from numpy import zeros, empty,  float32, uint16, percentile, clip, uint8,interp, log, fft
+from numpy import zeros, empty,  float32, uint16, percentile, clip, uint8,interp, log, fft, mean, std, squeeze, correlate
 import cv2
 from math import exp
 I16_BITS_MAX_VALUE = 65535
 from scipy.signal import correlate2d
-
+import imutils
 
 class AstroImageProcessing:
     @staticmethod
@@ -253,7 +253,7 @@ class AstroImageProcessing:
         """ Applique la transformation de Fourier à une image. """
         f_transform = fft.fft2(image)
         f_shift = fft.fftshift(f_transform)
-        return 20*log(abs(f_shift))
+        return f_shift#20*log(f_shift+1)
 
     @staticmethod
     def calculate_correlation(image, image2):
@@ -266,41 +266,96 @@ class AstroImageProcessing:
         correlation = correlate2d(image, image2, mode='full', boundary='fill', fillvalue=0)
         return correlation
 
-if __name__=="__main__":
-    from cv2 import imshow, waitKey,destroyAllWindows
-    from imagemanager import ImageManager
-    from qualitytest import QualityTest
+    @staticmethod
+    def to_int8(image):
+        return (image/image.max() * 255).astype(uint8)
 
-    frame = ImageManager.read_image('test/finam.jpg') #'test/15_44_11_sun_lapl5_ap88.tif')
-    frame = AstroImageProcessing.stretch(AstroImageProcessing.image_resize_width(frame, 640))
+    @staticmethod
+    def find_roi(image):
+        blurred = cv2.GaussianBlur(image, (11, 11), 0)
+        thresh = cv2.threshold(blurred, 10000, 65535, cv2.THRESH_BINARY)[1]
+        thresh = cv2.erode(thresh, None, iterations=2)
+        thresh = cv2.dilate(thresh, None, iterations=4)
 
-    print("init",QualityTest.local_contrast_laplace(frame))
-    initial = frame.copy()
-    imshow('test',frame)
-    waitKey(0)
+
+        contours = cv2.findContours(AstroImageProcessing.to_int8(thresh), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cnts = imutils.grab_contours(contours)
+        cropped_image = None
+        for c in cnts:
+        # compute the center of the contour
+            M = cv2.moments(c)
+            l1 = c[:,:,0].max() - c[:,:,0].min()
+            l2 = c[:,:,1].max() - c[:,:,1].min()
+            l = int(max(l1,l2))
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            cropped_image = image[cY-l:cY+l, cX-l:cX+l]
+
+        return cropped_image
     
-    frame = AstroImageProcessing.wavelet_sharpen(frame, 1.4,10)
-    print("wavelet",QualityTest.local_contrast_laplace(frame))
-    imshow('test1',frame)
-    waitKey(0)
 
-    frame = initial.copy()
-    frame = AstroImageProcessing.gaussian_sharpen(frame, 10,3)
-    print("Gaussian",QualityTest.local_contrast_laplace(frame))
-    imshow('test2',frame)
-    waitKey(0)
-    ImageManager.save_image('test.png', frame)
+    @staticmethod
+    def autocorrelation(image):
+        # Convertir l'image en niveaux de gris si elle est en couleur
 
-    frame = initial.copy()
-    frame = AstroImageProcessing.gaussian_blur(frame, 40,1)
-    print("Blur",QualityTest.local_contrast_laplace(frame))
-    imshow('test3',frame)
-    waitKey(0)
-    frame = AstroImageProcessing.gaussian_sharpen(frame, 10,3)
-    print("Blur + gaussian",QualityTest.local_contrast_laplace(frame))
-    imshow('test4',frame)
-    waitKey(0)
+        # Normaliser l'image
+        image = image.astype(float32) - mean(image)
+        image = image / std(image)
 
+        # Calculer l'autocorrelation
+        result = correlate2d(image, image, mode='full', boundary='fill', fillvalue=0)
 
+        return (result.astype(uint16)*65535)
+    
 
-    destroyAllWindows()
+    @staticmethod
+    def inverse_fourier_transform(fourier_image, shift=True):
+        # Appliquer la transformée de Fourier inverse
+        if shift:
+            f_ishift = fft.ifftshift(fourier_image)
+        else:
+            f_ishift = fourier_image
+        img_back = fft.ifftshift(fft.ifft2(f_ishift))
+
+        # Prendre la magnitude pour obtenir l'image réelle
+        #img_back = abs(img_back)
+
+        return img_back
+
+    @staticmethod
+    def resize_with_padding(image, target_width, target_height):
+        h, w = image.shape[:2]
+        if h==target_height and w==target_width:
+            return image
+        delta_w = target_width - w
+        delta_h = target_height - h
+        top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+        left, right = delta_w // 2, delta_w - (delta_w // 2)
+        color = 0
+        return cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
+
+    @staticmethod
+    def average_images(images):
+        """ Calcule l'image moyenne à partir d'un ensemble d'images de tavelures. """
+        mean_images = mean(images, axis=0)
+        return (mean_images*65535/mean_images.max()).astype(uint16)
+
+    @staticmethod
+    def sum_images(images):
+        """ Calcule l'image moyenne à partir d'un ensemble d'images de tavelures. """
+        sum = mean(images, axis=0)
+        return (sum)
+    
+
+    @staticmethod            
+    def crosscorr(img1, img2):
+        fft_product = (fft.fft2(img1) * fft.fft2(img2).conj())
+        cc_data0 = abs(fft.fftshift(fft.ifft2(fft_product)))
+        return cc_data0
+    
+    @staticmethod
+    def crosscorfft(im1, im2):
+        fft_product = (im1 * im2.conj())
+        return fft_product
+    
+

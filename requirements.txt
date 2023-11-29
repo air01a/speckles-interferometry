@@ -1,6 +1,7 @@
-pyplot
+matplot
 opencv-python
 scikit-learn
 astropy
 mpld3
 streamlit
+imutils

@@ -8,106 +8,298 @@ from processing import AstroImageProcessing
 from scipy.signal import correlate2d
 from mpl_toolkits.mplot3d import Axes3D
 import streamlit as st
-import mpld3
-from mpld3 import plugins
+from sklearn.cluster import KMeans
 import streamlit.components.v1 as components
-import imutils
+from scipy import ndimage as ndi
 
+import cv2
+import numpy as np
+from scipy.ndimage import gaussian_filter, maximum_filter
+from skimage.feature import peak_local_max
 
 def load_speckle_images(image_files):
     """ Charge les images de tavelures à partir d'une liste de chemins de fichiers. """
     imager = ImageManager()
+    im_per_column = 6
+    tab =  [roi for roi in [AstroImageProcessing.find_roi(imager.read_image(file)) for file in image_files] if roi is not None]
 
-    tab =  [imager.read_image(file) for file in image_files]
-    i=0
-    #for t in tab:
-    #    cv2.imshow(f"test{i}",(t/255).astype(np.uint8))
-    #    i+=1
+    max_w = 0
+    max_h = 0
+    for im in tab:
+        (h, w) = im.shape
+        max_w = max(w, max_w)
+        max_h = max(h, max_h)
+    columns = st.columns(im_per_column)
+    for index, im in enumerate(tab):
+        tab[index] = AstroImageProcessing.resize_with_padding(im, max_w, max_h)
+        with columns[index % im_per_column]:
+            st.image(AstroImageProcessing.to_int8(tab[index]))
     return tab
 
-def autocorrelation(image):
-    # Convertir l'image en niveaux de gris si elle est en couleur
-
-    # Normaliser l'image
-    image = image.astype(np.float32) - np.mean(image)
-    image = image / np.std(image)
-
-    # Calculer l'autocorrelation
-    result = correlate2d(image, image, mode='full', boundary='fill', fillvalue=0)
-
-    return (result.astype(np.uint16)*65535)
+def psdDeconvolveLPF(psdBinary, psdReference, lpfRadius=None):
 
 
-def align_images_using_cross_correlation(base_image, other_images):
-    """ Aligner les images en utilisant la corrélation croisée. """
-    aligned_images = [base_image]
-    for img in other_images:
-        # Calculer la corrélation croisée
-        cc = cv2.matchTemplate(img, base_image, cv2.TM_CCORR)
-        _, _, _, max_loc = cv2.minMaxLoc(cc)
+    imgSize = np.shape(psdReference)[1] # Calculate dimension of image
+    imgCenter = int(imgSize/2)          # Center index of image
 
-        # Déterminer le décalage
-        dx, dy = max_loc[0] - base_image.shape[1] // 2, max_loc[1] - base_image.shape[0] // 2
+    # Create centered meshgrid of image
+    xx,yy = np.meshgrid(np.arange(imgSize),np.arange(imgSize))
+    xx = np.subtract(xx,imgCenter)
+    yy = np.subtract(yy,imgCenter)
+    rr = np.power(np.power(xx,2)+np.power(yy,2),0.5)
+    
+    # Create LPF filter image if specified
+    if (lpfRadius != None):   
+        lpf = np.exp(-(np.power(rr,2)/(2*np.power(lpfRadius,2))))
+    else: 
+        lpf = np.zeros((imgSize,imgSize))
+        lpf.fill(1)
+    print(lpf.shape)
+    print(psdBinary.shape)
+    # Perform wiener filtering
+    return psdBinary*(1/psdReference)*lpf       
 
-        # Appliquer le décalage
-        translation_matrix = np.float32([[1, 0, dx], [0, 1, dy]])
-        aligned_img = cv2.warpAffine(img, translation_matrix, (img.shape[1], img.shape[0]))
+def apply_mean_mask_subtraction(image, k_size=3):
+    """
+    Applique une soustraction de masque moyen à l'image avec des noyaux croissants.
 
-        aligned_images.append(aligned_img)
+    :param image: Image d'entrée (autocorrelogramme).
+    :param max_kernel_size: Taille maximale du noyau carré (doit être impair).
+    :return: Image traitée.
+    """
+    processed_image = image.copy()
+    # Créer un noyau moyen
+    kernel = np.ones((k_size, k_size), np.float32) / (k_size * k_size)
+
+    # Appliquer le filtre moyenneur
+    mean_filtered = np.abs(cv2.filter2D(image, -1, kernel))
+    #mean_filtered = (mean_filtered - mean_filtered.min()) / (mean_filtered.max() - mean_filtered.min())
+    print(mean_filtered)
+    # Soustraire le résultat filtré de l'image originale
+    #processed_image = cv2.subtract(processed_image, mean_filtered)
+
+    return mean_filtered
+
+def filter(image):
+    rows, cols = image.shape
+    crow, ccol = rows // 2, cols // 2
+    radius = 30  # Radius of the low-pass filter
+    mask = np.zeros((rows, cols), np.uint8)
+    y, x = np.ogrid[:rows, :cols]
+    mask_area = (x - ccol)**2 + (y - crow)**2 <= radius**2
+    mask[mask_area] = 1
+
+
+    # Appliquer le masque
+    f_shift_filtered = image * mask
+    return f_shift_filtered
+
+
+def align2_images(images):
+    # Trouver les coordonnées des pixels les plus lumineux dans chaque image
+    max_coords = [np.unravel_index(np.argmax(img), img.shape) for img in images]
+
+    # Calculer le décalage nécessaire pour chaque image
+    max_x, max_y = max(coords[0] for coords in max_coords), max(coords[1] for coords in max_coords)
+    offsets = [(max_x - x, max_y - y) for x, y in max_coords]
+
+    # Agrandir les images et appliquer le décalage
+    new_size = (images[0].shape[0] + 2*max_x, images[0].shape[1] + 2*max_y)
+    aligned_images = []
+    for img, offset in zip(images, offsets):
+        new_img = np.zeros(new_size)
+        new_img[offset[0]:offset[0]+img.shape[0], offset[1]:offset[1]+img.shape[1]] = img
+        aligned_images.append(new_img)
+
     return aligned_images
 
-def average_speckle_images(speckle_images):
-    """ Calcule l'image moyenne à partir d'un ensemble d'images de tavelures. """
-    sum = np.mean(speckle_images, axis=0)
-    print(sum)
-    return (sum*65535/sum.max()).astype(np.uint16)
+def isolate_peaks(image, sigma=2, min_distance=5, num_peaks=10):
+    """
+    Isoler les trois principaux pics dans une image 2D.
 
+    :param image: Image d'entrée 2D.
+    :param sigma: Écart-type pour le filtre gaussien.
+    :param min_distance: Distance minimale entre les pics détectés.
+    :param num_peaks: Nombre de pics à isoler.
+    :return: Image avec seulement les trois principaux pics.
+    """
+    # Appliquer un filtre gaussien pour réduire le bruit
+    smoothed_image = gaussian_filter(image, sigma=sigma)
+    #smoothed_image = ndi.maximum_filter(image, size=20, mode='constant')
 
+    # Détection des maxima locaux
+    coordinates = peak_local_max(smoothed_image, min_distance=min_distance, num_peaks=num_peaks)
 
-def inverse_fourier_transform(fourier_image):
-    # Appliquer la transformée de Fourier inverse
-    f_ishift = np.fft.ifftshift(fourier_image)
-    img_back = np.fft.ifft2(f_ishift)
+    # Créer une nouvelle image pour afficher les pics
+    peak_image = np.zeros_like(image)
+    for coord in coordinates:
+        peak_image[coord[0], coord[1]] = image[coord[0], coord[1]]
 
-    # Prendre la magnitude pour obtenir l'image réelle
-    img_back = np.abs(img_back)
+    return peak_image
 
-    return img_back
 
 def process_speckle_interferometry(image_files):
     """ Traite un ensemble d'images de tavelures pour la speckle interferometry. """
     # Charger les images
-    st.header("Sum of correlation")
-    speckle_images = load_speckle_images(image_files)
 
+    speckle_images = load_speckle_images(image_files)
+    """speckle_images = align2_images(speckle_images)
+
+    for im in speckle_images:
+        plt.figure()
+        plt.imshow(im, cmap="gray")
+        plt.title("Observed and expected secondary locations")
+        plt.show()"""
+
+
+    st.header("Sum of correlation")
+    fouriers = []
+    psd = []
+    for im in speckle_images:
+        fouriers.append(AstroImageProcessing.fourier_transform(im))
+        psd.append(np.square(np.abs(AstroImageProcessing.fourier_transform(im))))
+    
+    psd_average= AstroImageProcessing.average_images((psd))
+    """plt.figure()
+    plt.imshow(np.abs((psd_average)),cmap="gray")
+    plt.title("Observed and expected secondary locations")
+    plt.show()"""
+    #psd_average=filter(psd_average)
+    spatial = AstroImageProcessing.inverse_fourier_transform((psd_average))
+
+    spatial = spatial.real
+    plt.figure()
+    plt.imshow(spatial)
+    plt.title("Observed and expected secondary locations")
+    plt.show()    
+    spatial = np.absolute(apply_mean_mask_subtraction(spatial,3))
+    print(spatial[spatial>1])
+    (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(spatial)
+    spatial[maxLoc[1], maxLoc[0]] = 0
+    spatial[maxLoc[1], maxLoc[0]] = spatial.max() *1.1
+    spatial = np.absolute(apply_mean_mask_subtraction(spatial,3))
+    
+    """for i in range(15,10):
+        print(i)
+        spatial[spatial < spatial.mean()*i] = 0
+        show_image_3d(spatial)"""
+    #spatial[spatial < spatial.mean()*5] = 0
+
+    #spatial+=spatial.min()
+    #spatial = np.clip(spatial,0, 1e10)
+    show_image_3d(spatial)
+    plt.figure()
+    plt.imshow(spatial)
+    plt.title("Observed and expected secondary locations")
+    plt.show()
+
+
+    plt.figure()
+    plt.imshow(isolate_peaks(spatial))
+    plt.title("Observed and expected secondary locations")
+    plt.show()
+    
+    """
+    sum_images = AstroImageProcessing.sum_images(speckle_images)
+
+    
+    st.header("Square correlation")
+    st.caption("Sum images spatial")
+    st.image(cv2.resize(AstroImageProcessing.to_int8(sum_images),(500,500)))
+
+
+
+    fourier = (AstroImageProcessing.fourier_transform(sum_images))
+    fourier2 = np.absolute(fourier)
+    fourier2 = AstroImageProcessing.to_int8(fourier2)
+    st.caption("SUM fourier transform")
+    st.image(cv2.resize(fourier2,(500,500)))
+
+    auto_correlation = np.absolute(AstroImageProcessing.crosscorfft(fourier, fourier))
+    #auto_correlation = (auto_correlation*255/auto_correlation.max()).astype(np.uint8)
+    st.caption("Auto corelation sum(fft)")
+    st.image(AstroImageProcessing.to_int8(cv2.resize(auto_correlation,(500,500))))
     fouriers = []
     for im in speckle_images:
         fouriers.append(AstroImageProcessing.fourier_transform(im))
-    
-    # Aligner les images
-    #aligned_images = align_images_using_cross_correlation(fouriers[0], fouriers[1:])
 
     # Calculer l'image moyenne
-    average_image = average_speckle_images(fouriers) #average_speckle_images(aligned_images)
+    average_fouriers = np.absolute(AstroImageProcessing.sum_images(fouriers)) #average_speckle_images(aligned_images)
 
     # Appliquer la transformation de Fourier
-    fourier_image = AstroImageProcessing.fourier_transform(average_image)
     fig = plt.figure(figsize=(8, 6))
-    print(fourier_image.shape)
-    #w = 190
-    #h = w
-    #x,y = (int(fourier_image.shape[1]/2-w/2),int(fourier_image.shape[0]/2-h/2))
-    #print(x,y, w, h)
-    # Afficher les résultats
+
     ax = fig.add_subplot()
-    ax.imshow(autocorrelation(fourier_image), cmap = 'gray')
-   # ax.imshow(autocorrelation(fourier_image)[y:int(y+y/2),x:x+w//2], cmap = 'gray')
-    #ax2 = fig.add_subplot()
-    #ax2.imshow(((autocorrelation(fourier_image))), cmap = 'gray')
-
+    st.caption("AUTOCORRELATION(FFT(SUM(Images)))")
+    ax.imshow(np.absolute(AstroImageProcessing.crosscorfft(average_fouriers,average_fouriers)))
     st.pyplot(fig)
+    image = np.absolute(AstroImageProcessing.fourier_transform(np.square(AstroImageProcessing.fourier_transform(sum_images))))
+    image = image
+    st.caption("FFT(FFT²)")
+    ax.imshow((image))
+    st.pyplot(fig)
+    result=[]
+    for i in speckle_images:
+
+        tmp = AstroImageProcessing.crosscorr(i,i)
+        st.image(AstroImageProcessing.to_int8(tmp))
+        result.append(tmp)
+
+    st.image(cv2.resize(AstroImageProcessing.to_int8(sum_images),(512,512)))
 
 
+    reference_location = find_brightest_pixel(speckle_images[0])
+    print(reference_location)
+    aligned_images = align_images(speckle_images, reference_location)
+    sum_images2 = AstroImageProcessing.sum_images(aligned_images)
+    ax = fig.add_subplot()
+
+    ax.imshow(AstroImageProcessing.levels(sum_images2,13000,1,65535))
+    #plt.show()
+    #show_image_3d(sum_images)
+    #show_image_3d(sum_images2)
+
+    for i in range(0,9):
+        fig = plt.figure(figsize=(8, 6))
+        image=apply_mean_mask_subtraction(sum_images2   ,3+i*2)
+        ax = fig.add_subplot()
+        ax.imshow(image)
+        #plt.show()
+    # Calcul de la valeur moyenne des pixels
+    mean_value = np.mean(sum_images2)
+
+    # Création d'un ensemble de données avec les coordonnées x, y et la valeur du pixel
+    # Uniquement pour les pixels dont la valeur dépasse la moyenne
+    data = []
+    for y in range(sum_images2.shape[0]):
+        for x in range(sum_images2.shape[1]):
+            if sum_images2[y, x] > mean_value:
+                data.append([x, y, sum_images2[y, x]])
+
+    data = np.array(data)
+
+    # Application de l'algorithme K-means avec 2 clusters
+    kmeans = KMeans(n_clusters=2, random_state=0).fit(data)
+    cluster_centers = kmeans.cluster_centers_
+    clustered_image = np.copy(image)
+    for i in range(sum_images2.shape[0]):
+        for j in range(sum_images2.shape[1]):
+            if sum_images2[i, j] > mean_value:
+                X = [j,i,sum_images2[i, j]]
+                print(X)
+                print(kmeans.predict([X]))
+
+    # Afficher l'image originale et l'image après clustering
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 1)
+    plt.imshow(image, cmap='gray')
+    plt.title("Image Originale")
+    plt.subplot(1, 2, 2)
+    plt.imshow(clustered_image, cmap='gray')
+    plt.title("Image Après Clustering")
+    plt.show()
+"""
+    
 def show_image_3d(image):
 
     x = np.arange(image.shape[1])
@@ -122,7 +314,7 @@ def show_image_3d(image):
     z = image
 
     # Afficher la surface
-    ax.plot_surface(x, y, z, cmap='gray')
+    ax.plot_surface(x, y, z)
 
     # Définir les libellés des axes
     ax.set_xlabel('Axe X')
@@ -133,89 +325,18 @@ def show_image_3d(image):
     st.pyplot(fig)
     plt.show()
 
-def to_st(image):
-    return (image/255).astype(np.uint8)
-
-
-def find_peak_intensity(image):
-    # Convertir en niveaux de gris
-    #gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # Trouver la position du pic d'intensité
-    (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(image)
-    print(minVal, maxVal, minLoc, maxLoc)
-    return maxLoc
-
-def find_roi(image):
-    st.header("Peak")
-    col1, col2= st.columns(2)
-    blurred = cv2.GaussianBlur(image, (11, 11), 0)
-    thresh = cv2.threshold(blurred, 10000, 65535, cv2.THRESH_BINARY)[1]
-    thresh = cv2.erode(thresh, None, iterations=2)
-    thresh = cv2.dilate(thresh, None, iterations=4)
-    #with col1:
-    #    st.image(thresh,clamp=True)
-
-    contours = cv2.findContours(to_st(thresh), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cnts = imutils.grab_contours(contours)
-    for c in cnts:
-	# compute the center of the contour
-        M = cv2.moments(c)
-        print(M)
-        l1 = c[:,:,0].max() - c[:,:,0].min()
-        l2 = c[:,:,1].max() - c[:,:,1].min()
-        l = int(max(l1,l2))
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
-        cv2.drawContours(thresh, [c], -1, (0, 0, 0), 2)
-
-        cropped_image = image[cY-l:cY+l, cX-l:cX+l]
-        print(cropped_image)
-        print("contour")
-        with col2:
-            st.image(to_st(cropped_image),clamp=True)
-    with col1:
-        st.image(to_st(thresh),clamp=True)
-    return cropped_image
-
-    # Trouver le bounding box du plus grand contour
-    #largest_contour = max(contours, key=cv2.contourArea)
-    #x, y, w, h = cv2.boundingRect(largest_contour)
-    #print("recadrage",x,y,w,h)
-    # Recadrer l'image sur la zone lumineuse
-
-    #cropped_image = image[y:y+h, x:x+w]
-    #with col2:
-    #    st.image(cropped_image,clamp=True)
-
-# Afficher ou sauvegarder l'image recadré
-
-    #fig, ax = plt.subplots()
-    #ax.imshow(thresh, cmap="gray")
-    #st.pyplot(ax)
-    #plt.show()
-
-def resize_with_padding(image, target_width, target_height):
-    h, w = image.shape[:2]
-    delta_w = target_width - w
-    delta_h = target_height - h
-    top, bottom = delta_h // 2, delta_h - (delta_h // 2)
-    left, right = delta_w // 2, delta_w - (delta_w // 2)
-    color = 0
-    return cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
-
 def square_correl(image):
     st.header("Correlations")
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.caption("Square correlation")
-        st.image(to_st(AstroImageProcessing.calculate_correlation(image, np.square(image))))
+        st.image(AstroImageProcessing.to_int8(AstroImageProcessing.calculate_correlation(image, np.square(image))))
     with col2:
         st.caption("FFT")
-        ft = AstroImageProcessing.fourier_transform(image)
+        ft = AstroImageProcessing.fourier_transform(image).real()
         ft = (ft*65535/ft.max()).astype(np.uint16)
-        st.image(to_st(ft))
+        st.image(AstroImageProcessing.to_int8(ft))
     with col3:
         st.caption("FFT Auto correlation")
         show_image_3d(AstroImageProcessing.calculate_correlation(ft,ft))
@@ -223,29 +344,56 @@ def square_correl(image):
         st.caption("FFT Square auto correlation")
         show_image_3d(AstroImageProcessing.calculate_correlation(ft,np.square(ft)))
 
-    
+
+def find_brightest_pixel(image):
+    """ Trouver les coordonnées du pixel le plus brillant dans l'image. """
+    minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(image)
+    return maxLoc
+
+def align_images(images, reference_location):
+    """ Aligner toutes les images par rapport à un emplacement de référence. """
+    aligned_images = []
+    print(images[0].shape)
+    h, w = images[0].shape
+
+    for img in images:
+        # Trouver le pixel le plus brillant
+        brightest_pixel = find_brightest_pixel(img)
+
+        # Calculer le décalage nécessaire
+        dx = reference_location[0] - brightest_pixel[0]
+        dy = reference_location[1] - brightest_pixel[1]
+
+        # Créer une matrice de translation et aligner l'image
+        translation_matrix = np.float32([[1, 0, dx], [0, 1, dy]])
+        aligned_img = cv2.warpAffine(img, translation_matrix, (w, h))
+
+        aligned_images.append(aligned_img)
+
+    return aligned_images
+
+def apply_mean_mask_subtraction(image, k_size=3):
+    """
+    Applique une soustraction de masque moyen à l'image avec des noyaux croissants.
+
+    :param image: Image d'entrée (autocorrelogramme).
+    :param max_kernel_size: Taille maximale du noyau carré (doit être impair).
+    :return: Image traitée.
+    """
+    processed_image = image.copy()
+    # Créer un noyau moyen
+    kernel = np.ones((k_size, k_size), np.float32) / (k_size * k_size)
+
+    # Appliquer le filtre moyenneur
+    mean_filtered = cv2.filter2D(image, -1, kernel)
+
+    # Soustraire le résultat filtré de l'image originale
+    processed_image = cv2.subtract(processed_image, mean_filtered)
+
+    return processed_image
 
 
 st.title("Data exploration for binaries stars post processing")
-path = "images/a258_f0006.fit"
-imager = ImageManager()
-image = imager.read_image(path)
-
-col1, col2 = st.columns(2)
-with col1:
-    st.header("Original")
-    st.image(to_st(image), clamp=True)
-#image = AstroImageProcessing.levels(AstroImageProcessing.stretch(image,0.2),5000,0.1,65000)
-with col2:
-    st.header("Processed")
-    st.image(to_st(image),clamp=True)
-st.header("3D View of image")
-image = find_roi(image)
-
-show_image_3d(image)
-#maxloc = find_peak_intensity(image)
-#print(maxloc)
-square_correl(image)
 
 image_files = []
 dir = "images"
@@ -253,9 +401,11 @@ for file in listdir(dir):
     file_path = dir + '/' + file
     if isfile(file_path) and splitext(file_path)[1]=='.fit':
         image_files.append(file_path)
+
+print(len(image_files))
     
 # Liste des chemins de fichiers des images de tavelures
 #image_files = ['images/speckle1.jpg', 'images/speckle2.jpg', 'images/speckle3.jpg'] # Remplacez par vos fichiers
 
 # Traitement des images de speckle
-#process_speckle_interferometry(image_files)
+process_speckle_interferometry(image_files)
