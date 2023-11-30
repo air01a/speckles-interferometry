@@ -1,11 +1,15 @@
 from cv2 import GaussianBlur, cvtColor, COLOR_BGR2HSV, COLOR_HSV2BGR, BORDER_DEFAULT, \
     resize
-from numpy import zeros, empty,  float32, uint16, percentile, clip, uint8,interp, log, fft, mean, std, squeeze, correlate
+from numpy import zeros, empty,  float32, uint16, percentile, clip, uint8,interp, log, fft, mean, std, squeeze, correlate, sqrt
 import cv2
 from math import exp
 I16_BITS_MAX_VALUE = 65535
 from scipy.signal import correlate2d
 import imutils
+from skimage import measure
+import matplotlib.pyplot as plt
+from skimage import io, measure, color
+from skimage.draw import polygon
 
 class AstroImageProcessing:
     @staticmethod
@@ -293,6 +297,33 @@ class AstroImageProcessing:
 
         return cropped_image
     
+    @staticmethod
+    def draw_contours(image):
+        contours = measure.find_contours(image, 0.2)
+        fig, ax = plt.subplots()
+        ax.imshow(image, cmap=plt.cm.gray)
+        thresh = image > percentile(image, 30) 
+        for contour in contours:
+            rr, cc = polygon(contour[:, 0], contour[:, 1], thresh.shape)
+            area = len(rr)  # chaque pixel compte pour une unité d'aire
+
+            # Calculer le rectangle englobant et d'autres propriétés
+            minr, minc, maxr, maxc = measure.regionprops(contour.astype(int))[0].bbox
+            centroid = measure.regionprops(contour.astype(int))[0].centroid
+            width = maxc - minc
+            height = maxr - minr
+
+            # Afficher les résultats
+            print(f'Contour area: {area}')
+            print(f'Bounding box center (y, x): {centroid}')
+            print(f'Width: {width}')
+            print(f'Height: {height}')
+            ax.plot(contour[:, 1], contour[:, 0], linewidth=2)
+
+        ax.axis('image')
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.show()
 
     @staticmethod
     def autocorrelation(image):

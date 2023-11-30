@@ -2,19 +2,16 @@ import numpy as np
 import cv2
 from matplotlib import pyplot as plt
 from os import listdir
-from os.path import splitext, isfile, isdir, getsize
+from os.path import splitext, isfile
 from imagemanager import ImageManager
 from processing import AstroImageProcessing
-from scipy.signal import correlate2d
-from mpl_toolkits.mplot3d import Axes3D
+
 import streamlit as st
-from sklearn.cluster import KMeans
-import streamlit.components.v1 as components
-from scipy import ndimage as ndi
+
 
 import cv2
 import numpy as np
-from scipy.ndimage import gaussian_filter, maximum_filter
+from scipy.ndimage import gaussian_filter
 from skimage.feature import peak_local_max
 
 def load_speckle_images(image_files):
@@ -74,7 +71,6 @@ def apply_mean_mask_subtraction(image, k_size=3):
     # Appliquer le filtre moyenneur
     mean_filtered = np.abs(cv2.filter2D(image, -1, kernel))
     #mean_filtered = (mean_filtered - mean_filtered.min()) / (mean_filtered.max() - mean_filtered.min())
-    print(mean_filtered)
     # Soustraire le résultat filtré de l'image originale
     #processed_image = cv2.subtract(processed_image, mean_filtered)
 
@@ -143,16 +139,7 @@ def process_speckle_interferometry(image_files):
     # Charger les images
 
     speckle_images = load_speckle_images(image_files)
-    """speckle_images = align2_images(speckle_images)
 
-    for im in speckle_images:
-        plt.figure()
-        plt.imshow(im, cmap="gray")
-        plt.title("Observed and expected secondary locations")
-        plt.show()"""
-
-
-    st.header("Sum of correlation")
     fouriers = []
     psd = []
     for im in speckle_images:
@@ -160,29 +147,38 @@ def process_speckle_interferometry(image_files):
         psd.append(np.square(np.abs(AstroImageProcessing.fourier_transform(im))))
     
     psd_average= AstroImageProcessing.average_images((psd))
-    """plt.figure()
-    plt.imshow(np.abs((psd_average)),cmap="gray")
-    plt.title("Observed and expected secondary locations")
-    plt.show()"""
-    #psd_average=filter(psd_average)
     spatial = AstroImageProcessing.inverse_fourier_transform((psd_average))
-
     spatial = spatial.real
+
+    
     plt.figure()
     plt.imshow(spatial)
     plt.title("Observed and expected secondary locations")
     plt.show()    
-    spatial = np.absolute(apply_mean_mask_subtraction(spatial,3))
-    print(spatial[spatial>1])
-    (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(spatial)
-    spatial[maxLoc[1], maxLoc[0]] = 0
-    spatial[maxLoc[1], maxLoc[0]] = spatial.max() *1.1
-    spatial = np.absolute(apply_mean_mask_subtraction(spatial,3))
+  
+  
+    print(spatial.dtype)
+    np.save("spatial.npy",spatial)
+    show_image_3d(spatial)
+
+    # Capture ellipse
+    spatial_elipse = spatial/spatial.max()
     
-    """for i in range(15,10):
-        print(i)
-        spatial[spatial < spatial.mean()*i] = 0
-        show_image_3d(spatial)"""
+    #spatial_elipse = spatial_elipse/spatial_elipse.max()
+    spatial_elipse = np.absolute(apply_mean_mask_subtraction(spatial_elipse,3))
+    show_image_3d(spatial_elipse)
+    for i in range(3):
+        spatial_elipse = np.clip(spatial_elipse, spatial_elipse.mean(),spatial_elipse.mean()*5)
+        spatial_elipse = np.clip(spatial_elipse, spatial_elipse.mean()/2,spatial_elipse.max())
+    show_image_3d(spatial_elipse)
+    
+    plt.figure()
+    plt.imshow(spatial_elipse)
+    plt.title("Observed and expected secondary locations")
+    plt.show()   
+    spatial_elipse = (spatial_elipse/spatial.max() * 65535).astype(np.uint16)
+    cv2.imwrite('result_elipse.png', spatial_elipse)
+    
     #spatial[spatial < spatial.mean()*5] = 0
 
     #spatial+=spatial.min()
@@ -193,12 +189,9 @@ def process_speckle_interferometry(image_files):
     plt.title("Observed and expected secondary locations")
     plt.show()
 
-
-    plt.figure()
-    plt.imshow(isolate_peaks(spatial))
-    plt.title("Observed and expected secondary locations")
-    plt.show()
-    
+    spatial = (spatial/spatial.max() * 65535).astype(np.uint16)
+    cv2.imwrite('result.png', spatial)
+    #AstroImageProcessing.draw_contours(spatial)
     """
     sum_images = AstroImageProcessing.sum_images(speckle_images)
 
