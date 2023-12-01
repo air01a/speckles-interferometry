@@ -1,6 +1,6 @@
 from cv2 import GaussianBlur, cvtColor, COLOR_BGR2HSV, COLOR_HSV2BGR, BORDER_DEFAULT, \
     resize
-from numpy import zeros, empty,  float32, uint16, percentile, clip, uint8,interp, log, fft, mean, std, squeeze, correlate, sqrt
+from numpy import zeros, empty,  float32, uint16, percentile, clip, uint8,interp, log, fft, mean, std, squeeze, correlate, sqrt, inf,ones
 import cv2
 from math import exp
 I16_BITS_MAX_VALUE = 65535
@@ -275,6 +275,16 @@ class AstroImageProcessing:
         return (image/image.max() * 255).astype(uint8)
 
     @staticmethod
+    def get_contour_params(cnt):
+        M = cv2.moments(cnt)
+        l1 = cnt[:,:,0].max() - cnt[:,:,0].min()
+        l2 = cnt[:,:,1].max() - cnt[:,:,1].min()
+        l = int(max(l1,l2))
+        cX = int(M["m10"] / M["m00"])
+        cY = int(M["m01"] / M["m00"])
+        return (cX, cY, l)
+
+    @staticmethod
     def find_roi(image):
         blurred = cv2.GaussianBlur(image, (11, 11), 0)
         thresh = cv2.threshold(blurred, 10000, 65535, cv2.THRESH_BINARY)[1]
@@ -284,29 +294,60 @@ class AstroImageProcessing:
 
         contours = cv2.findContours(AstroImageProcessing.to_int8(thresh), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         cnts = imutils.grab_contours(contours)
+        cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
         cropped_image = None
-        for c in cnts:
-        # compute the center of the contour
-            M = cv2.moments(c)
-            l1 = c[:,:,0].max() - c[:,:,0].min()
-            l2 = c[:,:,1].max() - c[:,:,1].min()
-            l = int(max(l1,l2))
-            cX = int(M["m10"] / M["m00"])
-            cY = int(M["m01"] / M["m00"])
-            cropped_image = image[cY-l:cY+l, cX-l:cX+l]
+        if len(cnts)==2: 
 
+            
+            """cX1,cY1,l1 = AstroImageProcessing.get_contour_params(cnts[0])
+            cX2,cY2,l2 = AstroImageProcessing.get_contour_params(cnts[1])
+            print(cX1,cY1,cX2,cY2,l1,l2)
+            cX = int((cX1 + cX2) / 2)
+            cY = int((cY1 + cY2) / 2)
+            l=max(abs((cX1-l1)-(cX2-l2)),abs((cY1-l1)-(cY2-l2)))
+            print(cX,cY,l)"""
+
+            x_min, x_max, y_min, y_max = (inf, -inf, inf, -inf)
+            for cnt in cnts:
+                (x, y, w, h) = cv2.boundingRect(cnt)
+                x_min = min(x_min, x)
+                y_min = min(y_min, y)
+                x_max = max(x_max, x + w)
+                y_max = max(y_max, y + h)
+            lx = x_max - x_min
+            ly = y_max - y_min
+            l = max(lx,ly)
+
+
+            cropped_image = image[y_min:y_min+l, x_min:x_min+l]
+        
+        else:
+            if len(cnts)==0:
+                return None
+            cX,cY,l = AstroImageProcessing.get_contour_params(cnts[0])
+            cropped_image = image[cY-l:cY+l, cX-l:cX+l]
         return cropped_image
     
     @staticmethod
-    def draw_contours(image):
-        contours = measure.find_contours(image, 0.2)
+    def draw_contours(image, level=0.8):
+        contours = measure.find_contours(image, level)
         fig, ax = plt.subplots()
         ax.imshow(image, cmap=plt.cm.gray)
         thresh = image > percentile(image, 30) 
+
+        regions_max = {}
         for contour in contours:
             rr, cc = polygon(contour[:, 0], contour[:, 1], thresh.shape)
             area = len(rr)  # chaque pixel compte pour une unité d'aire
+            if area>3 and len(contour)>20:
+                regions_max[area]=contour
 
+        areas = list(regions_max.keys())
+        areas.sort(reverse=True)
+
+
+        for k in areas:
+            contour = regions_max[k]
             # Calculer le rectangle englobant et d'autres propriétés
             minr, minc, maxr, maxc = measure.regionprops(contour.astype(int))[0].bbox
             centroid = measure.regionprops(contour.astype(int))[0].centroid
@@ -318,12 +359,39 @@ class AstroImageProcessing:
             print(f'Bounding box center (y, x): {centroid}')
             print(f'Width: {width}')
             print(f'Height: {height}')
+            print(len(contour))
             ax.plot(contour[:, 1], contour[:, 0], linewidth=2)
 
         ax.axis('image')
         ax.set_xticks([])
         ax.set_yticks([])
-        plt.show()
+        #plt.show()
+        return (contours,fig)
+    
+    @staticmethod
+    def draw_circle(image):
+        _, thresh = cv2.threshold(image, 3, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Initialiser la liste pour les coordonnées des centres des petits cercles
+        small_circle_coords = []
+        for cnt in contours:
+            # Calculer le cercle de bord minimal pour chaque contour
+            (x, y), radius = cv2.minEnclosingCircle(cnt)
+            center = (int(x), int(y))
+            radius = int(radius)
+            print("radius ",radius)
+            # Filtrer pour trouver les petits cercles (en supposant que les grands cercles ont un rayon plus grand)
+            #if radius < 10:  # Le seuil de rayon peut être ajusté en fonction de la taille de l'image
+            small_circle_coords.append(center)
+
+        #for center in small_circle_coords:
+        #    cv2.circle(image, center, 1, (255, 0, 0), 2)
+
+        # Afficher les centres des petits cercles
+        print("Coordonnées des petits cercles :", small_circle_coords)
+        return image
+
 
     @staticmethod
     def autocorrelation(image):
@@ -389,4 +457,17 @@ class AstroImageProcessing:
         fft_product = (im1 * im2.conj())
         return fft_product
     
+    @staticmethod
+    def apply_mean_mask_subtraction(image, k_size=3):
 
+        processed_image = image.copy()
+        # Créer un noyau moyen
+        kernel = ones((k_size, k_size), float32) / (k_size * k_size)
+
+        # Appliquer le filtre moyenneur
+        mean_filtered = cv2.filter2D(image, -1, kernel)
+
+        # Soustraire le résultat filtré de l'image originale
+        processed_image = cv2.subtract(processed_image, mean_filtered)
+
+        return processed_image

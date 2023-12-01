@@ -152,7 +152,6 @@ class ImageManager:
         else:
             raise TypeError("Attempt to read image format other than 'tiff', 'tif',"
                             " '.png', '.jpg' or 'fit', 'fits'")
-
         return image
     
 
