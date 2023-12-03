@@ -130,7 +130,8 @@ for coord in coordinates:
 
             imagec[coord[0],coord[1]] = [255,255,0]
             print("dist:%f, value: %i" % (dist,image[coord[0],coord[1]]))
-
+            ### TODO
+            ### CALCULATE MAIN AXIS EQUATION, FIND BEST CENTER ACCORDING TO THIS LINE
 
 cv2.ellipse(imagec,ellipse,(0,255,0),2)
 
