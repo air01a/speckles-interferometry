@@ -10,6 +10,7 @@ import math
 from skimage.draw import line_aa
 from processing import AstroImageProcessing
 from pyplot_utils import show_image, show_image_3d
+import json
 
 
 def detect_and_remove_lines(image):
@@ -70,7 +71,7 @@ st.title('# Speckle interferometry analysis')
 
 st.sidebar.header("Input Parameters")
 uploaded_file = st.file_uploader("Choose a file",type=['npy'])
-max_value = st.sidebar.slider('Max filtering', 0,2000, 300, )
+max_value = st.sidebar.slider('Max filtering', 0,65535, 300, )
 min_value = st.sidebar.slider('Min filtering', 0, 1200, 0)
 mean_filter = st.sidebar.slider('Mean filtering', 3, 14, 3, 2)
 level = st.sidebar.slider('Contour level', 0.0, 1.0, 0.8, 0.1)
@@ -114,12 +115,16 @@ if uploaded_file is not None:
     image = AstroImageProcessing.draw_circle(image)
     show_image(image,"Circled",st,"gray")
 
-
+    show_image_3d(image,st)
     st.caption(f"Contour numbers {len(cnt)}")
     
 
     if st.sidebar.button("Save", type="primary"):
         output = (image/image.max() * 65535).astype(np.uint16)
         cv2.imwrite(f"results/{name}_output.png", cv2.resize(output,(512,512)))
+        dic = {'max_filter':max_value,'min_filter':min_value, "n_filter":mean_filter,"min":spatial_elipse_initial.mean(),"max":spatial_elipse_initial.max(),
+               "mean":spatial_elipse_initial.mean()}
+        with open(f"results/{name}.json", "w") as outfile:
+            json.dump(dic, outfile)
 else:
     st.header("Waiting for input file")
