@@ -70,8 +70,9 @@ print("--------------")
 st.title('# Speckle interferometry analysis')
 
 st.sidebar.header("Input Parameters")
+max_filter_value = st.sidebar.slider('Max filtering', 300,65535, 300, )
 uploaded_file = st.file_uploader("Choose a file",type=['npy'])
-max_value = st.sidebar.slider('Max filtering', 0,65535, 300, )
+max_value = st.sidebar.slider('Max filtering', 0,max_filter_value, 300, )
 min_value = st.sidebar.slider('Min filtering', 0, 1200, 0)
 mean_filter = st.sidebar.slider('Mean filtering', 3, 14, 3, 2)
 level = st.sidebar.slider('Contour level', 0.0, 1.0, 0.8, 0.1)
@@ -82,6 +83,7 @@ if uploaded_file is not None:
     name = uploaded_file.name.split('.')[0]
     spatial_elipse_initial = load_image(uploaded_file)
     h,w = spatial_elipse_initial.shape
+    
     st.sidebar.caption(f"Filter Max : {max_value}")
     st.sidebar.caption(f"Filter Min : {min_value}")
     st.sidebar.caption(f"Mean filter : {mean_filter}")

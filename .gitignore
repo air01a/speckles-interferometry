@@ -32,7 +32,10 @@ MANIFEST
 
 # Dataset
 tmp/
-
+*.hdf5
+*.json
+*.png
+*.npy
 images2/
 images3/
 images-etalons/

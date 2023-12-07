@@ -42,3 +42,19 @@ def show_image(image,title="", st=None, cmap="viridis"):
         plt.imshow(image,cmap=cmap)
         plt.title(title)
         plt.show()    
+
+
+def show_images(images, title="", cmap="viridis", column=5,max_images=30, st=None):
+
+    column = min(column, len(images))
+    max = min(max_images,len(images))
+    fig, axs = plt.subplots(max//column, column)
+    #fig.set_figheight(int(max/column)*8)
+    #fig.set_figwidth(column*8)
+
+    for i in range(0,max):
+        axs[i//column,i%column].imshow(images[i])
+    if st:
+        st.pyplot(fig)
+    else:
+        fig.show()

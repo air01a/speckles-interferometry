@@ -5,3 +5,4 @@ astropy
 mpld3
 streamlit
 imutils
+tensorflow

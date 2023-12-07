@@ -117,7 +117,6 @@ class ImageManager:
 
         # Make sure files with extensions written in large print can be read as well.
         suffix = suffix.lower()
-
         # Case FITS format:
         if suffix in ('.fit', '.fits'):
             image = uint16(fits.getdata(filename))
