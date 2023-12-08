@@ -18,7 +18,7 @@ from model2 import get_model_deep_speckle
 # model is defined in model.py
 model = get_model_deep_speckle()
 # pretrained_weights.hdf5 can be downloaded from the link on our GitHub project page
-model.load_weights('.binarystar.80.hdf5')
+model.load_weights('.binarystar.50.hdf5')
 
 # test speckle patterns. Four types of objects (E,S,8,9),
 # Each object has five speckle patterns through 5 different test diffusers
@@ -26,7 +26,7 @@ model.load_weights('.binarystar.80.hdf5')
 #speckle_S = np.load('test_data/letter_S.npy')
 #speckle_8 = np.load('test_data/number_8.npy')
 #speckle_9 = np.load('test_data/test.npy')
-for i in range(1000,1004):
+for i in range(0,1):
     f1 = f"test/x_{i}.npy"
     f2 = f"test/c_{i}.npy"
 
@@ -34,9 +34,9 @@ for i in range(1000,1004):
     test = np.array([np.load(f1)])
     # prediction
     pred = model.predict(test, batch_size=2)
-    print(pred*256*256)
+    print(pred)
     result = np.load(f2)
-    print(result*256)
+    print(result)
 #pred_speckle_S = model.predict(speckle_S, batch_size=2)
 #pred_speckle_8 = model.predict(speckle_8, batch_size=2)
 #pred_speckle_9 = model.predict(speckle_9, batch_size=2)

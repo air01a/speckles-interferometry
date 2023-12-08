@@ -3,7 +3,7 @@ import numpy as np
 from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint
 #from model import get_model_deep_speckle
-from model3 import get_model_deep_speckle
+from model2 import get_model_deep_speckle
 from matplotlib import pyplot as plt
 #from loss_function_new import total_variation_balanced_cross_entropy, balanced_cross_entropy, gaussian_loss
 #from parameter import save_path, num_epochs, batch_size, save_period, lr_rate
@@ -27,7 +27,7 @@ save_path='.'
 num_epochs=80
 batch_size=4
 save_period=10
-lr_rate=0.1
+lr_rate=0.01
 
 def train_and_predict():
     X = []
@@ -50,7 +50,7 @@ def train_and_predict():
     assert len(X) == len(Y)
 
     # Charger les images
-    images_x = [np.expand_dims(np.load(join(maindir, f)),axis=-1) for f in X]
+    images_x = [np.load(join(maindir, f)) for f in X]
 
 
     #images_y = [np.expand_dims(np.load(join(maindir, f)),axis=-1) for f in Y]
@@ -82,7 +82,7 @@ def train_and_predict():
     print('Creating and compiling model...')
     print('-' * 30)
     model = get_model_deep_speckle()
-    #model.load_weights('.binarystar.10.hdf5')
+    model.load_weights('.binarystar.80.hdf5')
 
     #model.load_weights('save/lr4/MNIST_x2.60.hdf5')
     model.compile(optimizer=Adam(lr=lr_rate), loss='MeanSquaredError')

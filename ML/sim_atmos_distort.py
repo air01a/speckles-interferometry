@@ -8,13 +8,12 @@ import sys
 
 path_root = Path(__file__).parents[1]
 sys.path.append(str(path_root))
-print(sys.path)
 from processing import AstroImageProcessing
 
 # Size of simulated image
 nxy = 256
 number_simulated_pictures=50
-stars_simulated=5
+stars_simulated=1200
 result=[]
 for stars in range(stars_simulated):
       # Binary star specs
@@ -115,10 +114,10 @@ for stars in range(stars_simulated):
 
   #img = np.mean(result, axis=0)
   #np.save(f"simulated/y_{stars+350}.npy",sim.input_img)
-  np.save(f"simulated/x_{stars+1000}.npy",image_combinee)
-  np.save(f"simulated/c_{stars+1000}.npy",np.array([sim.x1/nxy,sim.y1/nxy,sim.x2/nxy,sim.y2/nxy]))
+  np.save(f"simulated/ex_{stars+888}.npy",image_combinee)
+  np.save(f"simulated/ec_{stars+888}.npy",np.array([rho, phi*np.pi/180]))
   #print(sim.x1,sim.y1,sim.x2,sim.y2)
-  #plt.imshow(spatial)
+  #plt.imshow(image_combinee)
   #plt.show()
   
 
