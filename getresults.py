@@ -12,12 +12,15 @@ from processing import AstroImageProcessing
 from pyplot_utils import show_image, show_image_3d
 import json
 
+import imagepers
+
 
 def detect_and_remove_lines(image):
 
     (h,w) = image.shape
     for i in range(int(w/2-0.3*w),int(w/2+0.3*w)):
         image[int(h/2), i] = (image[int(h/2)-1, i] + image[int(h/2)+1, i])/2
+        image[i, int(h/2)] = (image[i,int(h/2)-1] + image[i,int(h/2)+1])/2
     return image
 
 
@@ -105,8 +108,21 @@ if uploaded_file is not None:
 
 
     image=(spatial_elipse_filtered/spatial_elipse_filtered.max() * 255).astype(np.uint8)
+    image_bkp =spatial_elipse_filtered.copy()
     cnt,fig = AstroImageProcessing.draw_contours(image, level)
 
+    ret, thresh = cv2.threshold(image, image.mean()*0.5, 255, 0)
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    ellipse = cv2.fitEllipse(contours[0])
+    centre, axes, angle = ellipse
+    axe1, axe2 = axes[0] / 2, axes[1] / 2
+    axe_majeur = max(axe1,axe2)
+    axe_mineur = min(axe1,axe2)
+    c = np.sqrt(axe_majeur**2 - axe_mineur**2)
+    angle_rad = np.deg2rad(angle-90)
+
+    foyer1 = (int(centre[0] + c * np.cos(angle_rad)), int(centre[1] + c * np.sin(angle_rad)))
+    foyer2 = (int(centre[0] - c * np.cos(angle_rad)), int(centre[1] - c * np.sin(angle_rad)))
     #ret,image = cv2.threshold((image/255).astype(np.uint8),int(min_value/255),255,cv2.THRESH_BINARY)
     st.header("Image after edge reshaping")
     st.caption("Contour detection")
@@ -120,6 +136,31 @@ if uploaded_file is not None:
     show_image_3d(image,st)
     st.caption(f"Contour numbers {len(cnt)}")
     
+
+    g0 = imagepers.persistence(spatial_elipse_initial)
+    print("g0",g0)
+
+    g1 = imagepers.persistence(image_bkp)
+    print("g1",len(g1))
+    print(g1)
+    im = np.zeros(image_bkp.shape)
+    im=cv2.circle(im,(image_bkp.shape[0]//2,image_bkp.shape[0]//2),1,127,1)
+    im = cv2.ellipse(im,ellipse,255,1)
+    x1 = foyer1[0]
+    y1 = foyer1[1]
+    m = (y1-centre[1])/(x1-centre[0])
+    p = y1-m*x1
+    for pt in g1:
+        coord = pt[0]
+        y0 = int(m*coord[0]+p)
+        if coord[1]!=0:
+            print(abs(y0/coord[1]-1))
+        if coord[1]!=0 and abs(y0/coord[1]-1)<0.01:
+            im[coord[1],coord[0]] =127
+    show_image(im,"homo",st)
+
+
+
 
     if st.sidebar.button("Save", type="primary"):
         output = (image/image.max() * 65535).astype(np.uint16)

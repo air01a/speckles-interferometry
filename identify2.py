@@ -31,7 +31,7 @@ def calculate_circle_center(points):
     return result.x
 
 
-image = cv2.imread("results/stf2380_output.png")
+image = cv2.imread("trainingset/stf2380.png")
 image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 show_image_3d(image)
