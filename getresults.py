@@ -140,25 +140,28 @@ if uploaded_file is not None:
     g0 = imagepers.persistence(spatial_elipse_initial)
     print("g0",g0)
 
-    g1 = imagepers.persistence(image_bkp)
-    print("g1",len(g1))
-    print(g1)
-    im = np.zeros(image_bkp.shape)
-    im=cv2.circle(im,(image_bkp.shape[0]//2,image_bkp.shape[0]//2),1,127,1)
-    im = cv2.ellipse(im,ellipse,255,1)
-    x1 = foyer1[0]
-    y1 = foyer1[1]
-    m = (y1-centre[1])/(x1-centre[0])
-    p = y1-m*x1
-    for pt in g1:
-        coord = pt[0]
-        y0 = int(m*coord[0]+p)
-        if coord[1]!=0:
-            print(abs(y0/coord[1]-1))
-        if coord[1]!=0 and abs(y0/coord[1]-1)<0.01:
-            im[coord[1],coord[0]] =127
-    show_image(im,"homo",st)
-
+    bkp = 20*np.log(image.copy()+1)
+    for r in range(0,20):
+        im = bkp.copy()
+        im=cv2.circle(im,(image_bkp.shape[0]//2,image_bkp.shape[0]//2),r,0,-1)
+        g1 = imagepers.persistence(im)
+        print("g1",len(g1))
+        print(g1)
+        im=cv2.circle(im,(image_bkp.shape[0]//2,image_bkp.shape[0]//2),1,127,1)
+        im = cv2.ellipse(im,ellipse,255,1)
+        x1 = foyer1[0]
+        y1 = foyer1[1]
+        m = (y1-centre[1])/(x1-centre[0])
+        p = y1-m*x1
+        for pt in g1:
+            coord = pt[0]
+            y0 = int(m*coord[0]+p)
+            if coord[1]!=0:
+                print(abs(y0/coord[1]-1))
+            if coord[1]!=0 and abs(y0/coord[1]-1)<2:
+                im[coord[1],coord[0]] =255
+        show_image(im,f"homo{r}",st)
+        show_image_3d(im,st)
 
 
 
