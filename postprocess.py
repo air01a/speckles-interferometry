@@ -98,23 +98,35 @@ def angle_avec_reference(centre, reference, point):
 
 print("--------------")
 st.title('# Speckle interferometry analysis')
+uploaded_file = st.file_uploader("Choose a file",type=['npy'])
+if uploaded_file is not None:
+    if 'previous_file' in st.session_state and uploaded_file.name!=st.session_state['previous_file'] :
+        print("rest")
+        st.empty()
+    st.session_state['previous_file'] = uploaded_file.name
+
 
 st.sidebar.header("Input Parameters")
 max_filter_value = st.sidebar.slider('Max filtering', 300,65535, 300, )
-min_filter_value = st.sidebar.slider('Min filtering', 0,12000, 0, )
-uploaded_file = st.file_uploader("Choose a file",type=['npy'])
+min_filter_value = st.sidebar.slider('Min filtering', 400,12000, 400, )
+
 max_value = st.sidebar.slider('Max filtering', 0,max_filter_value, 300, )
 min_value = st.sidebar.slider('Min filtering', 0, min_filter_value, 0)
 mean_filter = st.sidebar.slider('Mean filtering', 3, 14, 3, 2)
 level = st.sidebar.slider('Contour level', 0.0, 1.0, 0.8, 0.1)
-radius = st.sidebar.slider('radius', 1.0, 1.0, 30.0, 0.5)
+radius = st.sidebar.slider('radius', 1, 30, 1, 1)
+
 if uploaded_file is not None:
+    
+
+
+
     st.header(uploaded_file.name)
     st.divider()
     name = uploaded_file.name.split('.')[0]
     spatial_elipse_initial = load_image(uploaded_file)
     h,w = spatial_elipse_initial.shape
-    
+    st.caption(int(spatial_elipse_initial.min()*65535))
     st.sidebar.caption(f"Filter Max : {max_value}")
     st.sidebar.caption(f"Filter Min : {min_value}")
     st.sidebar.caption(f"Mean filter : {mean_filter}")
@@ -122,7 +134,21 @@ if uploaded_file is not None:
     st.sidebar.caption(f"Image min : {spatial_elipse_initial.min()}")
     st.sidebar.caption(f"Image max : {spatial_elipse_initial.max()}")
     st.sidebar.caption(f"Image mean : {spatial_elipse_initial.mean()}")
+    st.sidebar.caption(f"radius : {radius}")
 
+    size=5
+    flattened_image = (spatial_elipse_initial*255).flatten()
+    bins = np.arange(0, 256, size)
+    histogram, bin_edges = np.histogram(flattened_image, bins)
+    print(histogram)
+    fig, ax = plt.subplots()
+
+    ax.set_title('Histogramme de l\'image')
+    ax.set_xlabel('Intensité des pixels')
+    ax.set_ylabel('Nombre de pixels')
+    ax.bar(bin_edges[:-1], histogram, width=size, edgecolor='black')
+    st.pyplot(fig)
+    
 
     h,w = spatial_elipse_initial.shape
     spatial_elipse = np.absolute(AstroImageProcessing.apply_mean_mask_subtraction(spatial_elipse_initial,mean_filter))
@@ -163,106 +189,24 @@ if uploaded_file is not None:
 
     image=(image/image.max() * 255).astype(np.uint8)
     image = AstroImageProcessing.draw_circle(image)
-    show_image(AstroImageProcessing.gaussian_sharpen(image,3,3),"Circled",st,"gray")
+    #image = cv2.circle(image, (image.shape[0]//2,image.shape[1]//2),radius, 0,-1)
 
-    gray = AstroImageProcessing.gaussian_sharpen(image,8,5)
-    gray = (255*(gray-gray.min())/(gray.max()-gray.min())).astype(np.uint8)
-    contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    m = (foyer1[1]-foyer2[1])/(foyer1[0]-foyer2[0])
+    mperp = -1/m
+    b = image.shape[0]//2 *(1-mperp)
 
-
-    # Trouver le contour avec la plus grande aire (si plusieurs formes sont présentes)
-    cnt = max(contours, key=cv2.contourArea)
-
-    # Calcul du centre de la forme
-    M = cv2.moments(cnt)
-    cx = int(M['m10']/M['m00'])
-    cy = int(M['m01']/M['m00'])
-    centre = np.array([cx, cy])
-    # Trouver le point de référence (par exemple, le plus à gauche)
-    point_reference = [cx,cy]
-
-    # Calcul des angles et des distances pour chaque point du contour
-    angles_distances = []
-    for i, pt in enumerate(cnt):
-        angle = angle_avec_reference(centre, point_reference, pt[0])
-        distance = np.linalg.norm(pt[0] - centre)
-        angles_distances.append((i, angle, distance))
-
-    # Trier par angle, puis par distance
-    angles_distances.sort(key=lambda x: (x[1], -x[2]))
-
-    # Sélectionner les trois points les plus éloignés ayant des angles similaires
-    indices_selectionnes = [angles_distances[i][0] for i in range(3)]
-    points_selectionnes = cnt[indices_selectionnes]
-    print(points_selectionnes)
-    centre_du_cercle, rayon = calculer_cercle_circonscrit(points_selectionnes)
-    print(centre_du_cercle, rayon)
-    ####################################
-    #### TODO faire une barre pour séparer les formes
-    ###################################
-    gray = cv2.circle(gray,(cx,cy),int(axe_mineur)-1,0,-1)
-    #gray = cv2.circle(gray,centre_du_cercle,rayon, 255,1)
-    gray = ((gray - gray.min())/(gray.max()-gray.min())*255).astype(np.uint8)
-    show_image(gray,"Cercle calculé",st)
-    contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    print("cnt : ", len(contours))
-    contours_sorted = sorted(contours, key=cv2.contourArea, reverse=True)
-    contours = contours_sorted[0:2]
-    M = cv2.moments(contours[0])
-    cx1 = int(M['m10']/M['m00'])
-    cy1 = int(M['m01']/M['m00'])
-    M = cv2.moments(contours[1])
-    cx2 = int(M['m10']/M['m00'])
-    cy2 = int(M['m01']/M['m00'])
-    cv2.circle(gray, (cx1,cy1),2,255,-1)
-    cv2.circle(gray, (cx2,cy2),2,255,-1)
-    #cv2.drawContours(gray, contours, -1, 255, 2)
-
-    show_image(gray,'new contours',st)
-    cv2.circle(image, (cx1,cy1),2,255,-1)
-    cv2.circle(image, (cx2,cy2),2,255,-1)
-    show_image(image,'c1,c2',st)
-
+    image=cv2.line(image,(0,int(b)),(image.shape[0],int(image.shape[0]*mperp+b)),0,radius)
+    show_image(image,"Circled",st,"gray")
     show_image_3d(image,st)
-    st.caption(f"Contour numbers {len(cnt)}")
-
     
-
-    g0 = imagepers.persistence(spatial_elipse_initial)
-    print("g0",g0)
-
-    bkp = image.copy()#*np.log(image.copy()+1)
-    for r in range(int(axe_mineur),int(axe_mineur)):
-        im = bkp.copy()
-        im=cv2.circle(im,(image_bkp.shape[0]//2,image_bkp.shape[0]//2),r+2,0,-1)
-        g1 = imagepers.persistence(im)
-        print("g1",len(g1))
-        print(g1)
-        #im=cv2.circle(im,(image_bkp.shape[0]//2,image_bkp.shape[0]//2),1,127,1)
-        im = cv2.ellipse(im,ellipse,255,1)
-        x1 = foyer1[0]
-        y1 = foyer1[1]
-        if (x1 - centre[0])==0:
-            x1+=0.0001
-        m = (y1-centre[1])/(x1-centre[0])
-        p = y1-m*x1
-        for pt in g1:
-            coord = pt[0]
-            y0 = int(m*coord[0]+p)
-            if coord[1]!=0:
-                print(abs(y0/coord[1]-1))
-            if coord[1]!=0 and abs(y0/coord[1]-1)<0.05:
-                im[coord[1],coord[0]] =255
-        show_image(im,f"homo{r}",st)
-        show_image_3d(im,st)
 
 
 
     if st.sidebar.button("Save", type="primary"):
         output = (image/image.max() * 65535).astype(np.uint16)
         cv2.imwrite(f"results/{name}_output.png", cv2.resize(output,(512,512)))
-        dic = {'max_filter':max_value,'min_filter':min_value, "n_filter":mean_filter,"min":spatial_elipse_initial.mean(),"max":spatial_elipse_initial.max(),
-               "mean":spatial_elipse_initial.mean()}
+        dic = {'radius':radius,'axe1':axe1,'axe2':axe2,'max_filter':max_value,'min_filter':min_value, "n_filter":mean_filter,"min":int(spatial_elipse_initial.min()*65535),"max":int(65535*spatial_elipse_initial.max()),
+               "mean":int(65535*spatial_elipse_initial.mean()),'histogram':histogram.tolist()}
         with open(f"results/{name}.json", "w") as outfile:
             json.dump(dic, outfile)
 else:
