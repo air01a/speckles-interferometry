@@ -31,10 +31,11 @@ def load_speckle_images(image_files):
             output.append(AstroImageProcessing.resize_with_padding(im, max_w, max_h))
     return output
 
-image = cv2.imread("results/stf2380_output.png")
+image = cv2.imread("results/cou619.png")
 print(image.shape)
 #image = cv2.imread("trainingset/cou619_output.png")
 image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
 
 ret, thresh = cv2.threshold(image, image.mean()*0.5, 255, 0)
 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -45,7 +46,7 @@ image = cv2.ellipse(image, ellipse,255,1)
 show_image(image)
 
 
-path = 'imagesrepo/stf2380'
+path = 'imagesrepo/cou619'
 image_files=[]
 for file in listdir(path):
     file_path = path + '/' + file
@@ -72,6 +73,7 @@ for im in speckle_images:
     print(axes[0],axes_ref[0])
     if axes[0]>0.09*axes_ref[0]:
         processed.append([image,dist])
+    #show_image(image)
     
 print(len(processed))
 

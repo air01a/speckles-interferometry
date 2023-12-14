@@ -6,7 +6,21 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import mean_squared_error
+import joblib
 
+def features_importance(model):
+    # Obtenir les importances des caractéristiques
+    importances = model.feature_importances_
+
+    # Associer les importances avec les noms des colonnes
+    feature_names = X.columns
+    feature_importances = pd.DataFrame(importances, index=feature_names, columns=["importance"])
+
+    # Trier les caractéristiques par importance
+    feature_importances = feature_importances.sort_values(by="importance", ascending=False)
+
+    # Afficher les résultats
+    print(feature_importances)
 
 maindir = "results/"
 
@@ -40,13 +54,17 @@ print("N_filter")
 X = df.drop(['radius', 'max_filter', 'min_filter', 'n_filter'], axis=1)
 Y_n = df[['n_filter']]
 
+
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y_n, test_size=0.3, random_state=42)
-model = RandomForestClassifier(random_state=42)
+model = RandomForestClassifier(random_state=42,n_estimators=200)
 model.fit(X_train, Y_train)
 Y_pred = model.predict(X_test)
 print(Y_pred)
 print(Y_test)
 print(f'MSE ', mean_squared_error(Y_test, Y_pred))
+
+features_importance(model)
+joblib.dump(model, 'model_nfilter.pkl')
 
 print("*"*30)
 print("max_filter")
@@ -54,16 +72,40 @@ X = df.drop(['radius', 'max_filter', ], axis=1)
 Y = df[['max_filter']]
 
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y['max_filter'], test_size=0.1, random_state=42)
-model = RandomForestRegressor(random_state=42)
+model = RandomForestRegressor(random_state=42,n_estimators=200)
 model.fit(X_train, Y_train)
 
 # Évaluer le modèle
 Y_pred = model.predict(X_test)
 print(f'MSE ', mean_squared_error(Y_test, Y_pred))
+for res in zip(Y_pred, Y_test):
+    print(f"p/r : {res[0]}/{res[1]}")
 
+features_importance(model)
+
+print("*"*30)
 
 
 print("*"*30)
+print("max_filter2")
+X = df.drop(['radius', 'max_filter', 'min_filter'], axis=1)
+Y = df[['max_filter']]
+
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y['max_filter'], test_size=0.1, random_state=42)
+model = RandomForestRegressor(random_state=42,n_estimators=200)
+model.fit(X_train, Y_train)
+
+# Évaluer le modèle
+Y_pred = model.predict(X_test)
+print(f'MSE ', mean_squared_error(Y_test, Y_pred))
+for res in zip(Y_pred, Y_test):
+    print(f"p/r : {res[0]}/{res[1]}")
+
+features_importance(model)
+joblib.dump(model, 'model_max_filter.pkl')
+
+print("*"*30)
+
 print("min_filter")
 X = df.drop(['radius', 'min_filter'], axis=1)
 Y = df[['min_filter']]
@@ -75,8 +117,11 @@ model.fit(X_train, Y_train)
 # Évaluer le modèle
 Y_pred = model.predict(X_test)
 print(f'MSE ', mean_squared_error(Y_test, Y_pred))
+for res in zip(Y_pred, Y_test):
+    print(f"p/r : {res[0]}/{res[1]}")
 
-
+features_importance(model)
+joblib.dump(model, 'model_min_filter.pkl')
 print("*"*30)
 print("radius")
 X = df.drop(['radius'], axis=1)
@@ -91,7 +136,7 @@ Y_pred = model.predict(X_test)
 print(f'MSE ', mean_squared_error(Y_test, Y_pred))
 print(Y_test,Y_pred)
 
-
-print(df)
+features_importance(model)
+joblib.dump(model, 'model_radius.pkl')
 with pd.ExcelWriter("test.xlsx") as writer:
     df.to_excel(writer)

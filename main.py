@@ -53,7 +53,6 @@ def process_speckle_interferometry(image_files,name):
     #show_image_3d(spatial)
 
     
-    
 
 
 maindir = "../CPSLO-Speckle-Reduction/simulated"

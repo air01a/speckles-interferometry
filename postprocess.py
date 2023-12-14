@@ -11,8 +11,13 @@ from skimage.draw import line_aa
 from processing import AstroImageProcessing
 from pyplot_utils import show_image, show_image_3d
 import json
+from sklearn.cluster import DBSCAN
 
 import imagepers
+from sklearn.cluster import KMeans
+import sklearn.cluster as skl_cluster
+import joblib
+from scipy.signal import find_peaks
 
 
 def detect_and_remove_lines(image):
@@ -58,12 +63,22 @@ def draw_contours(image):
 
     st.pyplot(fig)
 
+
+
 @st.cache_data
 def load_image(file):
     image = np.load(file)
     spatial_elipse = image/image.max()
     print (spatial_elipse.shape)
     return spatial_elipse
+
+@st.cache_data
+def load_model():
+    model_radius = joblib.load('model_radius.pkl')
+    model_n_filter = joblib.load('model_nfilter.pkl')
+    model_min = joblib.load('model_min_filter.pkl')
+    model_max = joblib.load('model_max_filter.pkl')
+    return(model_min, model_max, model_n_filter, model_radius)
 
 def calculer_cercle_circonscrit(pts):
     print(pts[0,0])
@@ -104,8 +119,8 @@ if uploaded_file is not None:
         print("rest")
         st.empty()
     st.session_state['previous_file'] = uploaded_file.name
-
-
+    
+#(model_min, model_max, model_n_filter, model_radius) = load_model()
 st.sidebar.header("Input Parameters")
 max_filter_value = st.sidebar.slider('Max filtering', 300,65535, 300, )
 min_filter_value = st.sidebar.slider('Min filtering', 400,12000, 400, )
@@ -125,6 +140,9 @@ if uploaded_file is not None:
     st.divider()
     name = uploaded_file.name.split('.')[0]
     spatial_elipse_initial = load_image(uploaded_file)
+    #spatial_elipse_initial[spatial_elipse_initial.shape[0]//2,spatial_elipse_initial.shape[1]//2]=0
+    
+    #spatial_elipse_initial[spatial_elipse_initial.shape[0]//2,spatial_elipse_initial.shape[1]//2]=spatial_elipse_initial.max()
     h,w = spatial_elipse_initial.shape
     st.caption(int(spatial_elipse_initial.min()*65535))
     st.sidebar.caption(f"Filter Max : {max_value}")
@@ -168,7 +186,33 @@ if uploaded_file is not None:
     cnt,fig = AstroImageProcessing.draw_contours(image, level)
 
     ret, thresh = cv2.threshold(image, image.mean()*0.5, 255, 0)
-    contours, hierarchy = cv2.findContours((AstroImageProcessing.gaussian_sharpen(thresh,8,5)*255/thresh.max()).astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv2.findContours((AstroImageProcessing.gaussian_sharpen(thresh,8,5)*255/thresh.max()).astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    contours=sorted(contours, key=cv2.contourArea, reverse=True)
+
+    print(contours[0].shape)
+
+    #clustering = DBSCAN(eps=3, min_samples=2).fit(contours[0])
+    
+    """
+    model = skl_cluster.SpectralClustering(n_clusters=3, affinity='nearest_neighbors', assign_labels='kmeans')
+    labels = model.fit_predict(contours[0].squeeze(axis=1))
+    color_image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    colors=[[255,127,0],[0,255,0],[0,0,255]]
+    for (i,pt) in enumerate(contours[0].squeeze(axis=1)):
+        color_image[pt[1],pt[0]]=colors[labels[i]]
+        print(pt[1],pt[0],labels[i])
+
+    pts = []
+    for cnt in contours[0].squeeze(axis=1):
+        pts.append([cnt[0],cnt[1]])
+
+    kmeans = KMeans(n_clusters=20, random_state=0,n_init=100).fit(pts)
+    for center in kmeans.cluster_centers_:
+        (cx,cy)=(int(center[0]),int(center[1]))
+        color_image = cv2.circle(color_image, (cx,cy), 1, (255,0,0), 1)
+
+
+    st.image(cv2.resize(color_image,(512,512)))"""
     ellipse = cv2.fitEllipse(contours[0])
     centre, axes, angle = ellipse
     axe1, axe2 = axes[0] / 2, axes[1] / 2
@@ -178,16 +222,18 @@ if uploaded_file is not None:
     angle_rad = np.deg2rad(angle-90)
 
 
-
+    image2 = cv2.drawContours(image.copy(), contours,-1,255)
+    image2 = cv2.ellipse(image2,ellipse,255, 1)
     foyer1 = (int(centre[0] + c * np.cos(angle_rad)), int(centre[1] + c * np.sin(angle_rad)))
     foyer2 = (int(centre[0] - c * np.cos(angle_rad)), int(centre[1] - c * np.sin(angle_rad)))
     #ret,image = cv2.threshold((image/255).astype(np.uint8),int(min_value/255),255,cv2.THRESH_BINARY)
     st.header("Image after edge reshaping")
     st.caption("Contour detection")
     st.pyplot(fig)
+    st.image(cv2.resize(image2,(512,512)))
 
 
-    image=(image/image.max() * 255).astype(np.uint8)
+    image=((image-image.min())/(image.max()-image.min()) * 255).astype(np.uint8)
     image = AstroImageProcessing.draw_circle(image)
     #image = cv2.circle(image, (image.shape[0]//2,image.shape[1]//2),radius, 0,-1)
 
@@ -195,10 +241,217 @@ if uploaded_file is not None:
     mperp = -1/m
     b = image.shape[0]//2 *(1-mperp)
 
-    image=cv2.line(image,(0,int(b)),(image.shape[0],int(image.shape[0]*mperp+b)),0,radius)
+    #image=cv2.line(image,(0,int(b)),(image.shape[0],int(image.shape[0]*mperp+b)),0,radius)
+    image=((image-image.min())/(image.max()-image.min()) * 255).astype(np.uint8)
+    ret, thresh = cv2.threshold(image, image.mean(), 255, 0)
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours=sorted(contours, key=cv2.contourArea, reverse=True)
+    
+
+    if len(contours)>1:
+        contours = contours[0:2]
+
+    #image = cv2.drawContours(image, contours,-1,(255))    
+    
+    for cnt in contours:
+        M = cv2.moments(cnt)
+        cx = int(M['m10']/M['m00'])
+        cy = int(M['m01']/M['m00'])
+        centre = (cx, cy)
+        #image = cv2.circle(image, (cx,cy),1,255,1)
+
+    m = (foyer1[1]-foyer2[1])/(foyer1[0]-foyer2[0])
+    b = image.shape[1]/2 *(1-m)
+    
+    d_max = math.sqrt(image.shape[0]**2 + image.shape[1]**2) / 2
+
+    x_C = image.shape[0]/2
+    y_C = image.shape[1]/2
+    dx = 1 / math.sqrt(1 + m**2)  # Normalisé
+    dy = m * dx
+
+    curve = []
+    
+    for d in range(0, int(d_max)):
+        # Calculer les coordonnées des deux points possibles C2
+        # Utilisation de la formule paramétrique de la droite
+        x_C2_1 = x_C + d * dx
+        y_C2_1 = y_C + d * dy
+
+        x_C2_2 = x_C - d * dx
+        y_C2_2 = y_C - d * dy
+
+        if 0 <= x_C2_1 < image.shape[0] and 0 <= y_C2_1 < image.shape[1]:
+            curve.append([d,image[int(y_C2_1),int(x_C2_1)]])
+
+        
+        if 0 <= x_C2_2 < image.shape[0] and 0 <= y_C2_2 < image.shape[1]:
+            curve.append([-d,image[int(y_C2_2),int(x_C2_2)]])
+    
+
+    curve = sorted(curve, key=lambda pair: pair[0])
+    x = [item[0] for item in curve]
+    y = [item[1] for item in curve]
+
+
+    grads = []
+    x2=[]
+    print(curve)
+    peak=[]
+    last=0
+    in_peak=False
+    first_peak=-1
+    for i in range(1,len(curve)):
+        x2.append(i)
+        grad = curve[i][1]+0.0-curve[i-1][1]
+        if grad>0:
+            in_peak=True
+            
+        if grad<0:
+            if in_peak:
+                if first_peak!=-1:
+                    ind = i-(i - first_peak)//2 -1
+                else:
+                    ind=i-1
+                in_peak=False
+                first_peak=-1
+                peak.append([ind,curve[ind][1]])
+        if grad==0 and in_peak and first_peak==-1:
+            first_peak = i
+            print(first_peak)
+        last = grad
+        grads.append(grad)
+    
+    peak = sorted(peak, key=lambda pair: pair[1], reverse=True)
+    if len(peak)>3:
+        peak = peak[0:3]
+    if len(peak)>2:
+        dist1 = curve[peak[0][0]][0]-curve[peak[1][0]][0]
+        dist2 = curve[peak[0][0]][0]-curve[peak[2][0]][0]
+        dist = (dist1 + dist2)/2*0.099
+
+        st.header(f"Distance calculated : {abs(dist)}")
+
+    fig, ax = plt.subplots()
+    ax.plot(x,y)
+    for i in peak:
+        ax.axvline(x=curve[i[0]][0], color='r', linestyle='--')
+    
+    
+
+    st.pyplot(fig)
+    
+    fig, ax = plt.subplots()
+    ax.plot(x2,grads)
+    for i in peak:
+        ax.axvline(x=i[0], color='r', linestyle='--')
+    
+    st.pyplot(fig)
+
+    
+
+    grad2=[]
+    x2 = []
+    for i in range(1,len(grads)):
+        grad = grads[i]+0.0-grads[i-1]
+        grad2.append(grad)
+        x2.append(i)
+    fig, ax = plt.subplots()
+    ax.plot(x2,grad2)
+    st.pyplot(fig)
+
+    """
+    print(m,b)
+    maximumm = 0
+    max_xy=[]
+
+    curve = []
+    for x in range(0,image.shape[0]):
+        y = int(m * x + b)
+        dist = math.sqrt((x - image.shape[0]/2)**2+(y-image.shape[1]/2)**2)
+        if x < image.shape[0]//2:
+            dist = -dist
+        
+        
+        if y>0 and y<image.shape[1]:
+            print(x,y, image.shape)
+            curve.append([dist, image[y,x]])
+            val = image[y,x]
+            if val> maximumm:
+                maximumm=val
+                max_xy=[]
+
+            if (val==maximumm):
+                max_xy.append(x)
+
+    x = np.mean(max_xy)
+    y = int(m * x + b)
+    dist = math.sqrt((image.shape[0]/2-x)**2+(image.shape[1]/2-y)**2)*0.099
+    st.caption(f"Distance calculée : {dist}")
+    print(curve)
+    curve = sorted(curve, key=lambda pair: pair[0])
+    x = [item[0] for item in curve]
+    y = [item[1] for item in curve]
+    fig, ax = plt.subplots()
+    ax.plot(x,y)
+    st.pyplot(fig)
+
+#--------------
+    for y in range(0,image.shape[1]):
+        x = int((y-b)/m)
+        dist = math.sqrt((x - image.shape[0]/2)**2+(y-image.shape[1]/2)**2)
+        if y < image.shape[1]//2:
+            dist = -dist
+        
+        
+        if x>0 and x<image.shape[0]:
+            print(x,y, image.shape)
+            curve.append([dist, image[y,x]])
+            val = image[y,x]
+            if val> maximumm:
+                maximumm=val
+                max_xy=[]
+
+            if (val==maximumm):
+                max_xy.append(x)
+
+    x = np.mean(max_xy)
+    y = int(m * x + b)
+    dist = math.sqrt((image.shape[0]/2-x)**2+(image.shape[1]/2-y)**2)*0.099
+    st.caption(f"Distance calculée : {dist}")
+    print(curve)
+    curve = sorted(curve, key=lambda pair: pair[0])
+    x = [item[0] for item in curve]
+    y = [item[1] for item in curve]
+    fig, ax = plt.subplots()
+    ax.plot(x,y)
+    st.pyplot(fig)
+"""
+
+    
+    last = y[len(x)//2]
+    dist_max = 0
+    for i in range(1,len(x)//2):
+        v1 = y[len(x)//2-i]
+        v2 = y[len(x)//2-i]
+        v = max(v1,v2)
+        if v > last:
+            dist_max=i
+        last = v
+    print(f"dist max {x[len(x)//2 + dist_max]*0.099}")
+    
+
+    
+
+    """
+    for x in max_xy:
+        image[int(m * x + b),x]=255
+ 
+    image = cv2.circle(image,(int(x),int(y)),1,255,1)
+    """
+
     show_image(image,"Circled",st,"gray")
     show_image_3d(image,st)
-    
 
 
 
