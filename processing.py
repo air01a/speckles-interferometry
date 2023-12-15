@@ -355,11 +355,7 @@ class AstroImageProcessing:
             height = maxr - minr
 
             # Afficher les résultats
-            print(f'Contour area: {area}')
-            print(f'Bounding box center (y, x): {centroid}')
-            print(f'Width: {width}')
-            print(f'Height: {height}')
-            print(len(contour))
+
             ax.plot(contour[:, 1], contour[:, 0], linewidth=2)
 
         ax.axis('image')
@@ -380,7 +376,6 @@ class AstroImageProcessing:
             (x, y), radius = cv2.minEnclosingCircle(cnt)
             center = (int(x), int(y))
             radius = int(radius)
-            print("radius ",radius)
             # Filtrer pour trouver les petits cercles (en supposant que les grands cercles ont un rayon plus grand)
             #if radius < 10:  # Le seuil de rayon peut être ajusté en fonction de la taille de l'image
             small_circle_coords.append(center)
@@ -389,7 +384,6 @@ class AstroImageProcessing:
         #    cv2.circle(image, center, 1, (255, 0, 0), 2)
 
         # Afficher les centres des petits cercles
-        print("Coordonnées des petits cercles :", small_circle_coords)
         return image
 
 

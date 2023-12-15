@@ -12,14 +12,14 @@ from processing import AstroImageProcessing
 from pyplot_utils import show_image, show_image_3d
 import json
 from sklearn.cluster import DBSCAN
-
+from scipy import ndimage
 import imagepers
 from sklearn.cluster import KMeans
 import sklearn.cluster as skl_cluster
 import joblib
 from scipy.signal import find_peaks
 
-
+from scipy.signal import savgol_filter
 def detect_and_remove_lines(image):
 
     (h,w) = image.shape
@@ -69,7 +69,6 @@ def draw_contours(image):
 def load_image(file):
     image = np.load(file)
     spatial_elipse = image/image.max()
-    print (spatial_elipse.shape)
     return spatial_elipse
 
 @st.cache_data
@@ -81,7 +80,6 @@ def load_model():
     return(model_min, model_max, model_n_filter, model_radius)
 
 def calculer_cercle_circonscrit(pts):
-    print(pts[0,0])
     x1, y1 = pts[0,0]
     x2, y2 = pts[1,0]
     x3, y3 = pts[2,0]
@@ -89,12 +87,10 @@ def calculer_cercle_circonscrit(pts):
     # Calcul des médiatrices pour les segments [P1P2] et [P1P3]
     ma = (y2 - y1) / (x2 - x1)
     mb = (y3 - y1) / (x3 - x1)
-    print("ma/mb",ma,mb)
 
     # Calcul du centre du cercle (xc, yc)
     xc = (ma * mb * (y1 - y3) + mb * (x1 + x2) - ma * (x1 + x3)) / (2 * (mb - ma))
     yc = -1/ma * (xc - (x1 + x2) / 2) + (y1 + y2) / 2
-    print("xc/yc",xc,yc)
 
     # Calcul du rayon
     rayon = np.sqrt((xc - x1)**2 + (yc - y1)**2)
@@ -116,7 +112,6 @@ st.title('# Speckle interferometry analysis')
 uploaded_file = st.file_uploader("Choose a file",type=['npy'])
 if uploaded_file is not None:
     if 'previous_file' in st.session_state and uploaded_file.name!=st.session_state['previous_file'] :
-        print("rest")
         st.empty()
     st.session_state['previous_file'] = uploaded_file.name
     
@@ -128,7 +123,7 @@ min_filter_value = st.sidebar.slider('Min filtering', 400,12000, 400, )
 max_value = st.sidebar.slider('Max filtering', 0,max_filter_value, 300, )
 min_value = st.sidebar.slider('Min filtering', 0, min_filter_value, 0)
 mean_filter = st.sidebar.slider('Mean filtering', 3, 14, 3, 2)
-level = st.sidebar.slider('Contour level', 0.0, 1.0, 0.8, 0.1)
+level = st.sidebar.slider('Contour level', -1.0, 1.0, 0.0)
 radius = st.sidebar.slider('radius', 1, 30, 1, 1)
 
 if uploaded_file is not None:
@@ -158,7 +153,6 @@ if uploaded_file is not None:
     flattened_image = (spatial_elipse_initial*255).flatten()
     bins = np.arange(0, 256, size)
     histogram, bin_edges = np.histogram(flattened_image, bins)
-    print(histogram)
     fig, ax = plt.subplots()
 
     ax.set_title('Histogramme de l\'image')
@@ -168,8 +162,11 @@ if uploaded_file is not None:
     st.pyplot(fig)
     
 
+
     h,w = spatial_elipse_initial.shape
     spatial_elipse = np.absolute(AstroImageProcessing.apply_mean_mask_subtraction(spatial_elipse_initial,mean_filter))
+    #spatial_elipse =  (0.0+spatial_elipse_initial-spatial_elipse_initial.min())/(spatial_elipse_initial.max() - spatial_elipse_initial.min())
+    #spatial_elipse = np.abs(spatial_elipse - ndimage.median_filter(spatial_elipse, mean_filter))
     spatial_elipse=spatial_elipse[1:h-1,1:w-1]*65535
     spatial_elipse=detect_and_remove_lines(spatial_elipse)
 
@@ -183,13 +180,12 @@ if uploaded_file is not None:
 
     image=(spatial_elipse_filtered/spatial_elipse_filtered.max() * 255).astype(np.uint8)
     image_bkp =spatial_elipse_filtered.copy()
-    cnt,fig = AstroImageProcessing.draw_contours(image, level)
+    #cnt,fig = AstroImageProcessing.draw_contours(image, level)
 
     ret, thresh = cv2.threshold(image, image.mean()*0.5, 255, 0)
     contours, hierarchy = cv2.findContours((AstroImageProcessing.gaussian_sharpen(thresh,8,5)*255/thresh.max()).astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     contours=sorted(contours, key=cv2.contourArea, reverse=True)
 
-    print(contours[0].shape)
 
     #clustering = DBSCAN(eps=3, min_samples=2).fit(contours[0])
     
@@ -222,10 +218,12 @@ if uploaded_file is not None:
     angle_rad = np.deg2rad(angle-90)
 
 
-    image2 = cv2.drawContours(image.copy(), contours,-1,255)
-    image2 = cv2.ellipse(image2,ellipse,255, 1)
+    #image2 = cv2.drawContours(image.copy(), contours,-1,255)
+    image2 = cv2.ellipse(image.copy(),ellipse,255, 1)
     foyer1 = (int(centre[0] + c * np.cos(angle_rad)), int(centre[1] + c * np.sin(angle_rad)))
     foyer2 = (int(centre[0] - c * np.cos(angle_rad)), int(centre[1] - c * np.sin(angle_rad)))
+    print(f"foyer {foyer1} {foyer2}")
+    image2 = cv2.line(image2,foyer1, foyer2, 0,3)
     #ret,image = cv2.threshold((image/255).astype(np.uint8),int(min_value/255),255,cv2.THRESH_BINARY)
     st.header("Image after edge reshaping")
     st.caption("Contour detection")
@@ -260,7 +258,7 @@ if uploaded_file is not None:
         centre = (cx, cy)
         #image = cv2.circle(image, (cx,cy),1,255,1)
 
-    m = (foyer1[1]-foyer2[1])/(foyer1[0]-foyer2[0])
+    m = (foyer1[1]-foyer2[1])/(foyer1[0]-foyer2[0])*(1+level)
     b = image.shape[1]/2 *(1-m)
     
     d_max = math.sqrt(image.shape[0]**2 + image.shape[1]**2) / 2
@@ -271,66 +269,115 @@ if uploaded_file is not None:
     dy = m * dx
 
     curve = []
-    
-    for d in range(0, int(d_max)):
+    image = spatial_elipse_filtered.copy()
+    step = 1
+    for d in range(0, int(d_max)*step):
         # Calculer les coordonnées des deux points possibles C2
         # Utilisation de la formule paramétrique de la droite
-        x_C2_1 = x_C + d * dx
-        y_C2_1 = y_C + d * dy
+        x_C2_1 = x_C + d/step * dx
+        y_C2_1 = y_C + d/step * dy
 
-        x_C2_2 = x_C - d * dx
-        y_C2_2 = y_C - d * dy
+        x_C2_2 = x_C - d/step * dx
+        y_C2_2 = y_C - d/step * dy
 
         if 0 <= x_C2_1 < image.shape[0] and 0 <= y_C2_1 < image.shape[1]:
-            curve.append([d,image[int(y_C2_1),int(x_C2_1)]])
+            curve.append([d/step,image[int(y_C2_1),int(x_C2_1)]])
 
         
         if 0 <= x_C2_2 < image.shape[0] and 0 <= y_C2_2 < image.shape[1]:
-            curve.append([-d,image[int(y_C2_2),int(x_C2_2)]])
+            curve.append([-d/step,image[int(y_C2_2),int(x_C2_2)]])
     
 
     curve = sorted(curve, key=lambda pair: pair[0])
+
+    """
+    x_values =x
+    y_values = y
+    window_size = 7
+      # window size must be odd
+    poly_order = 3  # polynomial order
+    if window_size > len(y_values):
+        window_size = len(y_values) - 1 if len(y_values) % 2 == 0 else len(y_values)
+    smoothed_y_values = savgol_filter(y_values, window_size, poly_order)
+
+
+    #curve = [(x[i], smoothed_y_values[i]) for i in range(len(smoothed_y_values))]
+"""
+    maximum=0
+    for i in range(len(curve)):
+        print(i,curve[i][1])
+        if curve[i][1] > maximum:
+            maximum = curve[i][1]
+
+    c=len(curve[:])//2
+    
+    print(f"max {maximum}")
+    for i in range(-4,4):
+
+        if curve[c+i][1]>0.9*maximum:
+            curve[c+i][1]=maximum
+    print("curve",curve[c-4][1],curve[c-3][1],curve[c-2][1],curve[c-1][1], curve[c][1], curve[c+1][1],curve[c+2][1])
+    #y = y-smoothed_y_values
     x = [item[0] for item in curve]
     y = [item[1] for item in curve]
 
-
     grads = []
     x2=[]
-    print(curve)
     peak=[]
     last=0
     in_peak=False
     first_peak=-1
-    for i in range(1,len(curve)):
+    for i in range(1,len(curve)-1):
         x2.append(i)
-        grad = curve[i][1]+0.0-curve[i-1][1]
+        grad = 0.0 + (curve[i+1][1]-curve[i][1])
+        print(i, grad,curve[i][1],first_peak, in_peak)
         if grad>0:
             in_peak=True
+            first_peak=-1
             
         if grad<0:
             if in_peak:
                 if first_peak!=-1:
-                    ind = i-(i - first_peak)//2 -1
+                    a="fp"
+                    ind = i-(i - first_peak)//2
                 else:
-                    ind=i-1
-                in_peak=False
-                first_peak=-1
+                    ind=i
+                    a="in"
+                    
                 peak.append([ind,curve[ind][1]])
+                print("+++"+a,ind, first_peak)
+            first_peak = -1
+            in_peak=False
+
+
         if grad==0 and in_peak and first_peak==-1:
             first_peak = i
-            print(first_peak)
         last = grad
         grads.append(grad)
-    
+    print("before sorted", peak)
     peak = sorted(peak, key=lambda pair: pair[1], reverse=True)
+    print("after sorted", peak)
     if len(peak)>3:
         peak = peak[0:3]
-    if len(peak)>2:
-        dist1 = curve[peak[0][0]][0]-curve[peak[1][0]][0]
-        dist2 = curve[peak[0][0]][0]-curve[peak[2][0]][0]
-        dist = (dist1 + dist2)/2*0.099
 
-        st.header(f"Distance calculated : {abs(dist)}")
+    if len(peak)>=2:
+        if len(peak)==3:
+            dist1 = 0.099*(abs(curve[peak[1][0]][0]))
+            dist2 = 0.099*(abs(curve[peak[0][0]][0]))
+        else:
+            dist = 0.099*(abs(curve[peak[1][0]][0]))
+            dist1 = dist2 = dist
+        st.header(f"Distance calculated : {dist1},{dist2}, {(dist1+dist2)/2}")
+
+    #x = [item[0] for item in curve]
+    #y = [item[1] for item in curve]
+
+
+    #fig, ax = plt.subplots()
+    #ax.plot(x_values,smoothed_y_values)
+    #for i in peak:
+    #    ax.axvline(x=curve[i[0]][0], color='r', linestyle='--')
+    #st.pyplot(fig)
 
     fig, ax = plt.subplots()
     ax.plot(x,y)
@@ -438,7 +485,6 @@ if uploaded_file is not None:
         if v > last:
             dist_max=i
         last = v
-    print(f"dist max {x[len(x)//2 + dist_max]*0.099}")
     
 
     
