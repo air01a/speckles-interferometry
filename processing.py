@@ -57,7 +57,6 @@ class AstroImageProcessing:
 
         height, width = input_image.shape[:2]
         color = len(input_image.shape) == 3
-
         # Allocate workspace: Three complete images, plus 1D object with length max(row, column).
         if color:
             fimg = empty((3, height, width, 3), dtype=float32)
@@ -67,7 +66,10 @@ class AstroImageProcessing:
             temp = zeros(max(width, height), dtype=float32)
 
         # Convert input image to floats.
-        fimg[0] = input_image / 65535
+        if input_image.max()>1:
+            fimg[0] = input_image / 65535
+        else:
+            fimg[0] = input_image
 
         # Start with level 0. Store its Laplacian on level 1. The operator is separated in a
         # column and a row operator.
@@ -93,7 +95,7 @@ class AstroImageProcessing:
                     fimg[lpass][:, col] = temp[:height] * 0.25
 
             # Compute the amount of the correction at the current level.
-            amt = amount * exp(-(lev - radius) * (lev - radius) / 1.5) + 1.
+            amt = amount[lev] * exp(-(lev - radius[lev]) * (lev - radius[lev]) / 1.5) + 1.
 
             fimg[hpass] -= fimg[lpass]
             fimg[hpass] *= amt
@@ -104,8 +106,12 @@ class AstroImageProcessing:
 
             hpass = lpass
 
+        if input_image.max()>1:
+            coeff=65535.0
+        else:
+            coeff=1.0
         # At the end add the coarsest level and convert back to 16bit integer format.
-        fimg[0] = ((fimg[0] + fimg[lpass]) * 65535.).clip(min=0., max=65535.)
+        fimg[0] = ((fimg[0] + fimg[lpass]) * coeff).clip(min=0., max=65535.)
         return fimg[0].astype(uint16)
 
     @staticmethod

@@ -18,6 +18,7 @@ from sklearn.cluster import KMeans
 import sklearn.cluster as skl_cluster
 import joblib
 from scipy.signal import find_peaks
+from scipy.ndimage import convolve
 
 from scipy.signal import savgol_filter
 def detect_and_remove_lines(image):
@@ -106,6 +107,27 @@ def angle_avec_reference(centre, reference, point):
     angle = np.arccos(dot_product)
     return angle
 
+def perona_malik_filter(image, iterations, kappa, gamma=0.1):
+    # Création des opérateurs de gradient
+    dx = np.array([[1, -1]])
+    dy = np.array([[1], [-1]])
+
+    for i in range(iterations):
+        # Calcul des gradients
+        ix = convolve(image, dx)
+        iy = convolve(image, dy)
+
+        # Calcul de la magnitude du gradient
+        norm_grad = np.sqrt(ix**2 + iy**2)
+
+        # Calcul du coefficient de diffusion
+        c = np.exp(-(norm_grad / kappa)**2)
+
+        # Application de la diffusion
+        image = image + gamma * (convolve(ix, dx) + convolve(iy, dy)) * c
+
+    return image
+
 
 print("--------------")
 st.title('# Speckle interferometry analysis')
@@ -172,13 +194,24 @@ if uploaded_file is not None:
 
 
     spatial_elipse_filtered = (np.clip(spatial_elipse, min_value,max_value)-min_value)*(max_value-min_value)
+
     st.header("Correlation after mean substraction")
+    # filtered_image = 
+    show_image(perona_malik_filter(spatial_elipse_filtered, iterations=400, kappa=5),"After mean substraction",st)
+
     show_image(spatial_elipse_filtered,"After mean substraction",st)
 
-
-
+    from skimage import color, data, restoration
+    from scipy.signal import convolve2d
+    psf = np.ones((5, 5)) / 25
+    img = convolve2d(spatial_elipse_filtered*65535, psf, 'same')
+    img += 0.1 * img.std() * np.random.standard_normal(img.shape)
+    deconvolved_img,_ = restoration.unsupervised_wiener(img, psf)
+    show_image(deconvolved_img,"wiener",st)
 
     image=(spatial_elipse_filtered/spatial_elipse_filtered.max() * 255).astype(np.uint8)
+    image = cv2.bilateralFilter(image, 15, 75, 75) 
+
     image_bkp =spatial_elipse_filtered.copy()
     #cnt,fig = AstroImageProcessing.draw_contours(image, level)
 
@@ -258,7 +291,7 @@ if uploaded_file is not None:
         centre = (cx, cy)
         #image = cv2.circle(image, (cx,cy),1,255,1)
 
-    m = (foyer1[1]-foyer2[1])/(foyer1[0]-foyer2[0])*(1+level)
+    m = (foyer1[1]-foyer2[1])/(foyer1[0]-foyer2[0])*(1+level*5)
     b = image.shape[1]/2 *(1-m)
     
     d_max = math.sqrt(image.shape[0]**2 + image.shape[1]**2) / 2
@@ -363,7 +396,7 @@ if uploaded_file is not None:
     if len(peak)>=2:
         if len(peak)==3:
             dist1 = 0.099*(abs(curve[peak[1][0]][0]))
-            dist2 = 0.099*(abs(curve[peak[0][0]][0]))
+            dist2 = 0.099*(abs(curve[peak[2][0]][0]))
         else:
             dist = 0.099*(abs(curve[peak[1][0]][0]))
             dist1 = dist2 = dist
