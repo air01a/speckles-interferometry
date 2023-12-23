@@ -39,8 +39,8 @@ st.sidebar.header("Input Parameters")
 max_filter_value = st.sidebar.slider('Max filtering', 300,65535, 300, )
 min_filter_value = st.sidebar.slider('Min filtering', 400,12000, 400, )
 
-max_value = st.sidebar.slider('Max filtering', 0,max_filter_value, 300, )
-min_value = st.sidebar.slider('Min filtering', 0, min_filter_value, 0)
+max_value = st.sidebar.slider('Max filtering', 0,max_filter_value, 200, )
+min_value = st.sidebar.slider('Min filtering', 0, min_filter_value, 55)
 mean_filter = st.sidebar.slider('Mean filtering', 3, 14, 3, 2)
 level = st.sidebar.slider('Contour level', -1.0, 1.0, 0.0)
 radius = st.sidebar.slider('radius', 1, 30, 1, 1)
@@ -102,8 +102,8 @@ if uploaded_file is not None:
 
 
     #### Calculate perpendicular line from the ellipse main axis
-    x_C = spatial_elipse.shape[0]/2
-    y_C = spatial_elipse.shape[1]/2
+    x_C = spatial_elipse.shape[1]/2
+    y_C = spatial_elipse.shape[0]/2
     (m,p) = calculate_line((focus1[0],focus1[1]),(focus2[0],focus2[1]))
     (m_perp,p_perp) = calculate_perp(m, (spatial_elipse.shape[0]/2, spatial_elipse.shape[1]/2))
 
@@ -144,7 +144,8 @@ if uploaded_file is not None:
     right_max={}
     while curve[i][0]<0:
         left_max[curve[i][1]]=curve[i][0]
-        right_max[curve[i+len(curve)//2][1]]=curve[i+len(curve)//2][0]
+        if (i+len(curve)//2)<len(curve):
+            right_max[curve[i+len(curve)//2][1]]=curve[i+len(curve)//2][0]
         i+=1
     
     lm = sorted(left_max.keys(), reverse=True)
