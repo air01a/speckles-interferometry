@@ -36,8 +36,7 @@ Pour réduire au maximum ces perturbations, on prend des temps de pose très cou
 
 ## Autocorrélation
 
-Afin d'extraire les informations utiles, à savoir l'angle formé par les 2 étoiles et la distance angulaire, on réalise l'intercorrélation de chaque image, et on réalise la somme de ces résultats. C'est ce que fait le script main.py, en calculant la densité spectrale de puissance (qui par le théorème de  Wiener-Khinchin est analogue à l'auto corrélation de l'image).
-
+Afin d'extraire les informations utiles, à savoir l'angle formé par les 2 étoiles et la distance angulaire, on réalise l'intercorrélation de chaque image, et on réalise la somme de ces résultats. 
 L'autocorrélation consiste à réaliser l'opération suivante : 
 $$R(\tau_x, \tau_y) = \sum_{x=1}^{M}\sum_{y=1}^{N} f(x, y) \cdot f(x + \tau_x, y + \tau_y)$$
 
@@ -49,7 +48,11 @@ La figure d'autocorrélation comportera 3 pics. Un pic central (l'image multipli
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/figure_2.png "Pics de Dirac") 
 
-Cela signifie que l'angle obtenue sur l'autocorrélation aura un biais possible de 180 °. En pratique sur des images réelles, cela donne : 
+Cela signifie que l'angle obtenue sur l'autocorrélation aura un biais possible de 180 °. 
+
+C'est ce que fait le script main.py, en calculant la densité spectrale de puissance (qui par le théorème de  Wiener-Khinchin est analogue à l'auto corrélation de l'image).
+
+En pratique sur des images réelles, cela donne : 
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/a1453.png "Auto corrélation") 
 
