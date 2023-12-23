@@ -41,7 +41,7 @@ Afin d'extraire les informations utiles, à savoir l'angle formé par les 2 éto
 L'autocorrélation consiste à réaliser l'opération suivante : 
 $$R(\tau_x, \tau_y) = \sum_{x=1}^{M}\sum_{y=1}^{N} f(x, y) \cdot f(x + \tau_x, y + \tau_y)$$
 
-Chaque pixel X,Y de l'image créée sera donc la somme des multiplications des pixels de l'image de base par l'image de base décalée de X et Y pixels. Si on imagine une couple d'étoiles représentés (en signal sur une dimension) par deux pics de dirac : 
+Chaque pixel X,Y de l'image créée sera donc la somme des multiplications des pixels de l'image de base par l'image de base décalée de X et Y pixels. Si on imagine une couple d'étoiles représentées (en signal sur une dimension) par deux pics de dirac : 
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/figure_1.png "Pics de Dirac") 
 
@@ -49,7 +49,7 @@ La figure d'autocorrélation comportera 3 pics. Un pic central (l'image multipli
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/figure_2.png "Pics de Dirac") 
 
-En pratique sur des images réelles, cela donne : 
+Cela signifie que l'angle obtenue sur l'autocorrélation aura un biais possible de 180 °. En pratique sur des images réelles, cela donne : 
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/a1453.png "Auto corrélation") 
 
@@ -88,7 +88,7 @@ Et voici l'image obtenue en soustrayant le masque.
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/a1453_result.png "Auto corrélation") 
 
-En traçant le graph correspondant à l'image obtenue le long de l'axe principal de l'ellipse, on retrouver bien les deux pics secondaires :
+En traçant le graph correspondant à l'image obtenue le long de l'axe principal de l'ellipse, on retrouve bien les deux pics secondaires :
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/a1453_graph.png "Auto corrélation") 
 
