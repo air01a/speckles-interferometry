@@ -61,7 +61,7 @@ Pour reprendre l'exemple précédent :
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/a1453_mean_filtering.png "Auto corrélation") 
 
-Voici le masque circulaire obtenue via le vecteur perpendiculaire à l'axe principal de l'éllipse : 
+Voici le masque circulaire obtenue via le vecteur perpendiculaire à l'axe principal de l'ellipse : 
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/a1453_central_contribution.png "Auto corrélation") 
 
@@ -69,7 +69,7 @@ Et voici l'image obtenue en soustrayant le masque.
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/a1453_result.png "Auto corrélation") 
 
-En traçant le graph correspondant à l'image obtenue le long de l'axe principal de l'éllipse, on retrouver bien les deux pics secondaires :
+En traçant le graph correspondant à l'image obtenue le long de l'axe principal de l'ellipse, on retrouver bien les deux pics secondaires :
 
 ![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/a1453_graph.png "Auto corrélation") 
 
