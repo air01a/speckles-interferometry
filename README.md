@@ -43,11 +43,11 @@ $$R(\tau_x, \tau_y) = \sum_{x=1}^{M}\sum_{y=1}^{N} f(x, y) \cdot f(x + \tau_x, y
 
 Chaque pixel X,Y de l'image créée sera donc la somme des multiplications des pixels de l'image de base par l'image de base décalée de X et Y pixels. Si on imagine une couple d'étoiles représentés (en signal sur une dimension) par deux pics de dirac : 
 
-![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/figure_1.png.png "Pics de Dirac") 
+![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/figure_1.png "Pics de Dirac") 
 
 La figure d'autocorrélation comportera 3 pics. Un pic central (l'image multipliée par elle même sans décalage) mais aussi deux autres pics, qui correspondront à un décalage X,Y égal à la distance séparant les étoiles :
 
-![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/figure_2.png.png "Pics de Dirac") 
+![Alt text](https://raw.githubusercontent.com/air01a/speckles-interferometry/main/image/figure_2.png "Pics de Dirac") 
 
 En pratique sur des images réelles, cela donne : 
 
