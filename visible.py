@@ -73,27 +73,21 @@ def process_speckle_interferometry(image_files,name):
     # Charger les images
 
     speckle_images = load_speckle_images(image_files)
-    
+    #sum_aligned_images(speckle_images),3)
+    speckle_images = (sum_aligned_images(speckle_images))
+    brightest_pixel = find_brightest_pixel(speckle_images)
 
-    print(f"    * images loaded : {len(speckle_images)}")
-    fouriers = []
-    psd = []
-    for im in speckle_images:
-        fouriers.append(AstroImageProcessing.fourier_transform(im))
-        psd.append(np.square(np.abs(AstroImageProcessing.fourier_transform(im))))
-    
-    psd_average= AstroImageProcessing.average_images((psd))
-    spatial = AstroImageProcessing.inverse_fourier_transform((psd_average))
-    spatial = spatial.real
+    speckle_images[brightest_pixel[1],brightest_pixel[0]]=0
+    speckle_images[brightest_pixel[1],brightest_pixel[0]]=speckle_images.max()
 
-    #show_image(spatial,"Observed and expected secondary locations")
-    np.save(f"results/{name}.npy",spatial)
-    print(f"    * Writing results/{name}.npy")
-    spatial = (spatial)/(spatial.max())*65535
-    cv2.imwrite(f"results/{name}.png",spatial.astype(np.uint16))
-    #show_image_3d(spatial)
+    speckle_images = AstroImageProcessing.apply_mean_mask_subtraction(speckle_images)
+    speckle_images[speckle_images<0]=0
 
-    
+
+    #for im in align2_images(speckle_images):
+    show_image((speckle_images),"test")
+    show_image_3d((speckle_images))
+
 
 
 maindir = "imagesrepo/"

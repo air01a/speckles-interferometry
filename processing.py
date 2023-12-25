@@ -442,7 +442,7 @@ class AstroImageProcessing:
     @staticmethod
     def sum_images(images):
         """ Calcule l'image moyenne à partir d'un ensemble d'images de tavelures. """
-        sum = mean(images, axis=0)
+        sum = sum(images, axis=0)
         return (sum)
     
 
@@ -469,5 +469,5 @@ class AstroImageProcessing:
 
         # Soustraire le résultat filtré de l'image originale
         processed_image = cv2.subtract(processed_image, mean_filtered)
-
+        
         return processed_image
