@@ -11,10 +11,119 @@ import cv2
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from skimage.feature import peak_local_max
+from scipy.signal import find_peaks
+
+from imagecalculation import  find_ellipse
+from scipy.ndimage.filters import maximum_filter
+from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
+from math import sqrt
+
+from findpeaks import findpeaks
+
+def detect_peaks2(image):
+
+    fp = findpeaks(method='mask',denoise="mean")
+
+    res=(fp.fit(image)['Xdetect']*image)
+    (x,y) = find_brightest_pixel(res)
+    res[y,x]=0
+    (x2,y2) = find_brightest_pixel(res)
+    print(x,y)
+    print(x2,y2)
+    print(f"rho { sqrt((x-x2)**2+(y-y2)**2)}")
+    #fp.plot_preprocessing()
+    #fp.plot()
+    cv2.circle(image,(x2,y2),2,image.max()*1.1,-1)
+    cv2.circle(image,(x,y),2,image.max()*1.1,-1)
+    #-show_image(image)
+    return (x,y, x2,y2)
+    """
+    Takes an image and detect the peaks usingthe local maximum filter.
+    Returns a boolean mask of the peaks (i.e. 1 when
+    the pixel's value is the neighborhood maximum, 0 otherwise)
+    
+
+    # define an 8-connected neighborhood
+    neighborhood = generate_binary_structure(2,2)
+
+    #apply the local maximum filter; all pixel of maximal value 
+    #in their neighborhood are set to 1
+    local_max = maximum_filter(image, footprint=neighborhood)==image
+    #local_max is a mask that contains the peaks we are 
+    #looking for, but also the background.
+    #In order to isolate the peaks we must remove the background from the mask.
+
+    #we create the mask of the background
+    background = (image==0)
+
+    #a little technicality: we must erode the background in order to 
+    #successfully subtract it form local_max, otherwise a line will 
+    #appear along the background border (artifact of the local maximum filter)
+    eroded_background = binary_erosion(background, structure=neighborhood, border_value=1)
+
+    #we obtain the final mask, containing only peaks, 
+    #by removing the background from the local_max mask (xor operation)
+    detected_peaks = local_max ^ eroded_background
+
+
+    rest = detected_peaks*image
+    output = np.zeros_like(image)
+    peak_number=40
+    for i in range(peak_number):
+        max_loc = find_brightest_pixel(rest)
+        rest[max_loc[1],max_loc[0]]=0
+        output[max_loc[1],max_loc[0]]=peak_number-i
+    """
+
+
+def detect_peaks(image):
+    """
+    Takes an image and detect the peaks usingthe local maximum filter.
+    Returns a boolean mask of the peaks (i.e. 1 when
+    the pixel's value is the neighborhood maximum, 0 otherwise)
+    """
+
+    # define an 8-connected neighborhood
+    neighborhood = generate_binary_structure(2,2)
+
+    #apply the local maximum filter; all pixel of maximal value 
+    #in their neighborhood are set to 1
+    local_max = maximum_filter(image, footprint=neighborhood)==image
+    #local_max is a mask that contains the peaks we are 
+    #looking for, but also the background.
+    #In order to isolate the peaks we must remove the background from the mask.
+
+    #we create the mask of the background
+    background = (image==0)
+
+    #a little technicality: we must erode the background in order to 
+    #successfully subtract it form local_max, otherwise a line will 
+    #appear along the background border (artifact of the local maximum filter)
+    eroded_background = binary_erosion(background, structure=neighborhood, border_value=1)
+
+    #we obtain the final mask, containing only peaks, 
+    #by removing the background from the local_max mask (xor operation)
+    detected_peaks = local_max ^ eroded_background
+
+
+    rest = detected_peaks*image
+    output = np.zeros_like(image)
+    peak_number=40
+    for i in range(peak_number):
+        max_loc = find_brightest_pixel(rest)
+        rest[max_loc[1],max_loc[0]]=0
+        output[max_loc[1],max_loc[0]]=peak_number-i
+
+
+
+    #show_image(output)
+
+
+    return output
 
 def load_speckle_images(image_files):
     imager = ImageManager()
-    tab =  [roi for roi in [AstroImageProcessing.find_roi(imager.read_image(file)) for file in image_files] if roi is not None]
+    tab =  [roi for roi in [AstroImageProcessing.find_roi((imager.read_image(file))) for file in image_files] if roi is not None]
     max_w = 0
     max_h = 0
     for im in tab:
@@ -23,9 +132,15 @@ def load_speckle_images(image_files):
         max_h = max(h, max_h)
 
     output = []
+    peak = np.zeros((max_h,max_w))
     for index, im in enumerate(tab):
         if tab[index] is not None and len(tab[index]>0):
             output.append(AstroImageProcessing.resize_with_padding(im, max_w, max_h))
+            peak += detect_peaks(output[-1])
+            
+            
+    #-show_image(peak)
+    
     return output
 
 def find_brightest_pixel(image):
@@ -35,8 +150,11 @@ def find_brightest_pixel(image):
 
 def align_images(images):
     """ Aligner les images en s'assurant qu'elles ont toutes la même taille finale. """
-    brightest_pixels = [find_brightest_pixel(img) for img in images]
+    ref = images[0]
+    
+    #brightest_pixels = [find_brightest_pixel(img) for img in images]
 
+    brightest_pixels  = [align_images_2(ref,img) for img in images]
     # Trouver les décalages maximaux pour aligner les images
     max_x = max([p[0] for p in brightest_pixels])
     max_y = max([p[1] for p in brightest_pixels])
@@ -45,7 +163,7 @@ def align_images(images):
     max_width = max([img.shape[1] + (max_x - x) for img, (x, y) in zip(images, brightest_pixels)])
     max_height = max([img.shape[0] + (max_y - y) for img, (x, y) in zip(images, brightest_pixels)])
 
-    aligned_images = []
+    aligned_images = [ref]
     for img, (x, y) in zip(images, brightest_pixels):
         dx, dy = max_x - x, max_y - y
 
@@ -55,6 +173,27 @@ def align_images(images):
         aligned_images.append(new_image)
 
     return aligned_images
+
+
+def align_images_2(image1, image2):
+    # Convertir les images en niveaux de gris
+    gray1 = ((image1-image1.min())/(image1.max() - image1.min())*255).astype(np.uint8)
+    gray2 = ((image2-image2.min())/(image2.max() - image2.min())*255).astype(np.uint8)
+
+    # Calculer l'intercorrélation entre les deux images
+    correlation_output = cv2.matchTemplate(gray1, gray2, cv2.TM_CCOEFF_NORMED)
+    
+    # Trouver la position du maximum de corrélation
+    _, _, _, max_loc = cv2.minMaxLoc(correlation_output)
+
+    # Calculer le décalage entre les images
+    #x_offset = max_loc[0]
+    #y_offset = max_loc[1]
+
+    # Aligner la deuxième image sur la première
+    #aligned_image = cv2.warpAffine(image2, np.float32([[1, 0, x_offset], [0, 1, y_offset]]), (image1.shape[1], image1.shape[0]))
+
+    return max_loc
 
 def sum_aligned_images(images):
     """ Somme des images alignées. """
@@ -66,30 +205,84 @@ def sum_aligned_images(images):
         sum_image=sum_image+img
         i+=1
 
-    return sum_image/i
+    return sum_image
+
+
+def find_contours(src,mean_filter=9):
+    image = ((src.copy() - src.min())/(src.max()-src.min())*255).astype(np.uint8)
+    ret, thresh = cv2.threshold(image,mean_filter*image.mean(), 255, 0)
+    #show_image(thresh, "test")
+    #show_image(thresh)
+    contours, hierarchy = cv2.findContours((thresh).astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    contours=sorted(contours, key=cv2.contourArea, reverse=True)
+    return contours
+
+def get_angle(image):
+
+    contours = find_contours(image)
+    if len(contours[0])>5:
+        (ellipse, major_axe, minor_axe, angle_rad, focus1, focus2) = find_ellipse(contours[0])
+    else:
+        return None, None
+    image=cv2.ellipse(image.copy(), ellipse,255,1)
+    #show_image(image, "test")
+    return (angle_rad,major_axe)
+
+def isolate_peaks2(image):
+    # Appliquer un flou pour réduire le bruit (optionnel)
+    gray = (255*(image - image.min())/(image.max()-image.min())).astype(np.uint8)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    #-show_image(blurred)
+    #-show_image_3d(blurred)
+    return detect_peaks2(blurred)
+
 
 def process_speckle_interferometry(image_files,name):
     """ Traite un ensemble d'images de tavelures pour la speckle interferometry. """
     # Charger les images
-
+    angles =  []
+    axes = []
+    angles_index = []
     speckle_images = load_speckle_images(image_files)
+    
+    for index, im in enumerate(speckle_images):
+        angles_index.append([im.max(), im])
+    sorted_result = sorted(angles_index, key=lambda x: x[0], reverse=True)
+    #print(sorted_result)
+
+
+    best_images = []
+    for i in range(0,200):
+        #best_images.append(speckle_images[sorted_result[i][1]])
+        best_images.append(sorted_result[i][1])
+
+    speckle_images = best_images
     #sum_aligned_images(speckle_images),3)
     speckle_images = (sum_aligned_images(speckle_images))
     brightest_pixel = find_brightest_pixel(speckle_images)
 
-    speckle_images[brightest_pixel[1],brightest_pixel[0]]=0
-    speckle_images[brightest_pixel[1],brightest_pixel[0]]=speckle_images.max()
+    #speckle_images[brightest_pixel[1],brightest_pixel[0]]=0
+    #speckle_images[brightest_pixel[1],brightest_pixel[0]]=speckle_images.max()
 
-    speckle_images = AstroImageProcessing.apply_mean_mask_subtraction(speckle_images)
+    speckle_images = AstroImageProcessing.apply_mean_mask_subtraction(speckle_images,7)
+
+
     speckle_images[speckle_images<0]=0
 
 
     #for im in align2_images(speckle_images):
-    show_image((speckle_images),"test")
-    show_image_3d((speckle_images))
+    im = speckle_images
+    #for i in range(0,10):
+    im = np.clip(im,im.mean()*5/2, im.max())
+    #show_image(im,"test "+str(i))
+    #show_image_3d(im)
+    
+    x,y,x2,y2 = isolate_peaks2(speckle_images)
+    return x,y,x2,y2
 
 
 
+results = []
 maindir = "imagesrepo/"
 
 for dr in listdir(maindir):
@@ -102,7 +295,14 @@ for dr in listdir(maindir):
             if isfile(file_path) and splitext(file_path)[1]=='.fit':
                 image_files.append(file_path)
         print(f"############\nProcessing {dir}")
-        process_speckle_interferometry(image_files,dr)
+        x,y, x2,y2 = process_speckle_interferometry(image_files,dr)
+        results.append([dir,x,y,x2,y2])
+        
+
+for result in results:
+    name,x,y,x2,y2 = result
+    rho = ((x-x2)**2 + (y-y2)**2)**(0.5)*0.099
+    print(f"{name}, {rho}")
 
 
 
