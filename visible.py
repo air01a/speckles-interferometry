@@ -252,7 +252,7 @@ def process_speckle_interferometry(image_files,name):
 
 
     best_images = []
-    for i in range(0,200):
+    for i in range(0,300):
         #best_images.append(speckle_images[sorted_result[i][1]])
         best_images.append(sorted_result[i][1])
 
@@ -273,8 +273,9 @@ def process_speckle_interferometry(image_files,name):
     #for im in align2_images(speckle_images):
     im = speckle_images
     #for i in range(0,10):
+    np.save('test.npy',im)
     im = np.clip(im,im.mean()*5/2, im.max())
-    #show_image(im,"test "+str(i))
+    show_image(im,"test "+str(i))
     #show_image_3d(im)
     
     x,y,x2,y2 = isolate_peaks2(speckle_images)
