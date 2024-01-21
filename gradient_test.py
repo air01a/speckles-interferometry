@@ -45,8 +45,10 @@ def gradient_descent(x_data, y_data, initial_params, learning_rate, num_iteratio
             print("Iteration", _, "cost =", cost_function(params, x_data, y_data))
     return params
 
+
+(a,b,c)= (500, 30, -10)
 x = np.random.rand(1000)
-y = 5*x**2+3*x-1
+y = a*x**2+b*x+c
 
 
 initial_params = [1, 1,1]
