@@ -1,5 +1,7 @@
 import numpy as np
 from pyplot_utils import show_image, show_image_3d
+from scipy.optimize import minimize
+
 
 def df_da(x, a,b, c):
     return x**2
@@ -8,11 +10,11 @@ def df_db(x,a,b,c):
     return x
 
 def df_dc(x,a,b,c):
-    return 1
+    return x**3
 
 def F(x, params):
     a,b,c = params
-    return a*x**2 +b*x + c
+    return a*x**2 +b*x + c*x**3
 
 # Calcul du gradient de la fonction de coût
 def gradient(params, x_data, y_data):
@@ -34,6 +36,7 @@ def cost_function(params, x_data, y_data):
 def gradient_descent(x_data, y_data, initial_params, learning_rate, num_iterations, batch_size):
     params = initial_params
     n_batch = len(x_data) // batch_size
+    last_result=None
     for _ in range(num_iterations):
         for i in range(n_batch):
             max_i = (i+1)*batch_size
@@ -41,22 +44,32 @@ def gradient_descent(x_data, y_data, initial_params, learning_rate, num_iteratio
                 max_i = len(x_data)
             grad = gradient(params, x_data[i*batch_size:max_i], y_data[i*batch_size:max_i])
             params = params - learning_rate * grad
+        cf=cost_function(params, x_data, y_data)
         if _ % 10 == 0:  # Afficher le progrès tous les 100 itérations
-            print("Iteration", _, "cost =", cost_function(params, x_data, y_data))
+            if last_result!=None and last_result == cf:
+                learning_rate /=10
+                print("decrease learning rate :", learning_rate)
+            last_result = cf
+            print("Iteration", _, "cost =", cf)
+            
     return params
 
 
-(a,b,c)= (500, 30, -10)
+(a,b,c)= (0.3, 0.5, -0.1)
 x = np.random.rand(1000)
-y = a*x**2+b*x+c
+y = a*x**2+b*x+c*x**3
 
 
-initial_params = [1, 1,1]
+initial_params = [1, 1,0]
 
 # Paramètres de la descente de gradient
 learning_rate = 0.1
 num_iterations = 300
 batch_size = 5
+
+
+result = minimize(cost_function, initial_params, args=(x, y))
+print(result.x)
 
 # Exécution de la descente de gradient
 optimized_params = gradient_descent(x, y, initial_params, learning_rate, num_iterations, batch_size)

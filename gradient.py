@@ -1,5 +1,6 @@
 import numpy as np
 from pyplot_utils import show_image, show_image_3d
+from scipy.optimize import minimize,least_squares
 
 
 def df_dA1(x, y, x01, y01, A1, b, a):
@@ -55,7 +56,6 @@ def gradient(params, x_data, y_data, z_data):
         cost_minus = cost_function(params, x_data, y_data, z_data)
         grad[i] = (cost_plus - cost_minus) / epsilon"""
     
-    [x1, y1, A1, x2, y2, A2, a, b, B]
     funcs =  [df_dx01, df_dy01,df_dA1, df_dx02, df_dy02, df_dA2, df_da, df_db]
     for i, func in enumerate(funcs):
         grad[i]= np.mean(2*func(x_data,y_data, *params)*(F(x_data,y_data,*params)-z_data))
@@ -80,27 +80,32 @@ def gradient_descent(x_data, y_data, z_data, initial_params, learning_rate, num_
 
 image = np.load("test.npy")
 image = (image - image.min())/(image.max() - image.min())
+print(image.max())
 show_image(image)
 y_indices, x_indices = np.indices(image.shape)
 
 # Applatissez les données
-x_data_flat = x_indices.ravel()
-y_data_flat = y_indices.ravel()
-z_data_flat = image.ravel()
+x_data = x_indices.ravel()
+y_data = y_indices.ravel()
+z_data = image.ravel()
 
-mask = z_data_flat > 0.1
-x_data = x_data_flat[mask] / image.shape[1]
-y_data = y_data_flat[mask] / image.shape[0]
-z_data = z_data_flat[mask]
-
-im = np.zeros_like(image)
+#mask = z_data_flat > 0.2
+#x_data = x_data_flat[mask] / image.shape[1]
+#y_data = y_data_flat[mask] / image.shape[0]
+#z_data = z_data_flat[mask]
 
 
-for i,v in enumerate(x_data):
-    print(x_data[i],y_data[i],z_data[i])
-    im[int(y_data[i]*image.shape[0]),int(x_data[i]*image.shape[1])] = z_data[i]
+import cv2
+min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(image)
+print(max_loc)
+#im = np.zeros_like(image)
 
-show_image(im)
+
+#for i,v in enumerate(x_data):
+#    print(x_data[i],y_data[i],z_data[i])
+#    im[int(y_data[i]*image.shape[0]),int(x_data[i]*image.shape[1])] = z_data[i]
+
+#show_image(im)
 
 # Données : x_data, y_data et z_data (z_data étant les valeurs observées de F)
 #x_data = np.array([...])  # Vos données x
@@ -108,12 +113,24 @@ show_image(im)
 #z_data = np.array([...])  # Vos valeurs observées de F
 
 # Paramètres initiaux (estimations initiales)
-initial_params = [0.5, 0.5, 1, 0.5, 0.5, 0.5, 0.2, 0.2 ,0.]
-
+initial_params = [max_loc[0]/image.shape[1], max_loc[1]/image.shape[0], 1,0, 0, 0.5, 0.2, 0.2 ,0.]
+bounds = [(0.1, 0.9), (0.1, 0.9), (1, 1), (0.1, 0.9), (0.1, 0.9), (0.1, 0.9),(0, 1), (0, 1), (0, 1)]
 # Paramètres de la descente de gradient
-learning_rate = 0.01
+learning_rate = 0.1
 num_iterations = 1000
+result = least_squares(cost_function, initial_params, args=(x_data, y_data,z_data))
+print(result.x)
+x0_1, y0_1, A1, x0_2, y0_2, A2, a, b, B = result.x
+x0_1 *= image.shape[1]
+y0_1 *= image.shape[0]
+x0_2 *= image.shape[1]
+y0_2 *= image.shape[0]
 
+print("First point : ", x0_1, y0_1, A1)
+print("Second point : ", x0_2, y0_2, A2)
+dist = ((x0_1-x0_2)**2 + (y0_1-y0_2)**2)**0.5
+print("Distance :",dist)
+"""
 # Exécution de la descente de gradient
 optimized_params = gradient_descent(x_data, y_data, z_data, initial_params, learning_rate, num_iterations)
 print(optimized_params)
@@ -124,4 +141,4 @@ x2 *=  image.shape[1]
 y2 *=  image.shape[0]
 # Afficher les paramètres optimisés
 print("Paramètres optimisés :", A1, A2, x1, y1, x2, y2, a, b, B )
-print("dist :", 0.099*(((x2-x1)**2+(y2-y1)**2)**0.5))
+print("dist :", 0.099*(((x2-x1)**2+(y2-y1)**2)**0.5))"""
